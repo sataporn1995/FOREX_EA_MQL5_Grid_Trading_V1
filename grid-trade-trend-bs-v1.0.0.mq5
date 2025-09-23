@@ -40,6 +40,7 @@ input double     InpNoDupLevelRatio  = 0.0;      // 0.15*GridStep เป็น�
 
 input bool     InpUseCloseSignal  = true;        // ต้องการแท่งปิดยืนยันทิศ (bullish/bearish) หรือไม่
 input double   InpMaxDistancePts  = 100.0;       // ระยะ "เข้าใกล้" EMA สั้น (หน่วย points)
+input int      InpMaxSpreadPts    = 200;         // กระจายราคาสูงสุด (points) เพื่อเปิดออเดอร์
 
 //------------------------- State -----------------------------------
 string Symb;
@@ -104,6 +105,14 @@ bool CloseConfirmation(int dir)
    double close0= iClose(_Symbol, _Period, 1);
    if(dir>0) return (close0 > open0);   // bullish bar
    else      return (close0 < open0);   // bearish bar
+}
+
+// Spread filter
+bool SpreadOK()
+{
+   double tickSize = _Point;
+   double spreadPts = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID))/tickSize;
+   return (spreadPts <= InpMaxSpreadPts);
 }
 
 int CountOpenPositions(int dir=0) // 0=all, 1=buy, -1=sell
@@ -322,6 +331,8 @@ int OnInit()
 
 void OnTick()
 {
+   if(!SpreadOK()) return;
+   
    // 1) ถ้าไม่มีออเดอร์ -> เปิดเริ่มชุด
    if(CountOurPositions()==0)
    {
