@@ -14,8 +14,8 @@ enum Direction { DIR_BUY=0, DIR_SELL=1 };
 
 input Direction  InpDirection        = DIR_BUY;   // หน้าเทรด: Buy / Sell
 input double     InpLots             = 0.01;      // Lot ต่อออเดอร์
-input int        InpGridStepPoints   = 400;       // ระยะห่างกริด (จุด)
-input int        InpProfitTargetPts  = 400;       // กำไรสะสม(จุด) เพื่อปิดทั้งชุด
+input int        InpGridStepPoints   = 5000;       // ระยะห่างกริด (จุด)
+input int        InpProfitTargetPts  = 3000;       // กำไรสะสม(จุด) เพื่อปิดทั้งชุด
 input int        InpSlippage         = 20;        // Slippage (points)
 input int        InpMaxOrders        = 0;         // จำกัดจำนวนออเดอร์ (0=ไม่จำกัด)
 input long       InpMagic            = 660077;    // Magic number
@@ -24,11 +24,13 @@ input bool       InpCommentPriceLvl  = true;      // เขียนระดั
 // ความปลอดภัย: ป้องกันเปิดซ้ำระดับเดิม (เช็คช่วงกันชน 15% ของกริด)
 input double     InpNoDupLevelRatio  = 0.0;      // 0.15*GridStep เป็นช่วงกันชน // 0 = ไม่ Block ช่วงราคา เข้าออเดอร์ได้เลย
 
-input bool     InputEnableMultiplyLot  = false;    // true = Enable & false = Disable
-input int      InputMulOrderMinLvl1 = 5;
-input double   InputMulOrderLvl1 = 2.0;
-input int      InputMulOrderMinLvl2 = 15;
-input double   InputMulOrderLvl2 = 3.0;
+input bool     InputEnableZones  = true;    // true = Enable & false = Disable
+input int      InputStartOrderZone_1 = 14;
+input double   InputMultiplyZone_1 = 2.0;
+input int      InputStartOrderZone_2 = 24;
+input double   InputMultiplyZone_2 = 3.0;
+input int      InputStartOrderZone_3 = 30;
+input double   InputMultiplyZone_3 = 5.0;
 
 //------------------------- State -----------------------------------
 string Symb;
@@ -69,12 +71,13 @@ int CountOurPositions()
    return total;
 }
 
-double CalLotSizeForPutOrder()
+double CalLotByZones()
 {
    double lots = InpLots * 1.0;
-   if (!InputEnableMultiplyLot) return lots;
-   if (CountOurPositions() >= InputMulOrderMinLvl2) lots *= InputMulOrderLvl2;
-   else if (CountOurPositions() >= InputMulOrderMinLvl1) lots *= InputMulOrderLvl1;
+   if (!InputEnableZones) return NormalizeDouble(lots, 2);
+   if (CountOurPositions() >= InputStartOrderZone_3) lots *= InputMultiplyZone_3;
+   else if (CountOurPositions() >= InputStartOrderZone_2) lots *= InputMultiplyZone_2;
+   else if (CountOurPositions() >= InputStartOrderZone_1) lots *= InputMultiplyZone_1;
    return NormalizeDouble(lots, 2);
 }
 
@@ -186,7 +189,7 @@ bool MaybeOpenNext(Direction dir)
       {
          Trade.SetExpertMagicNumber(InpMagic);
          string cmt = InpCommentPriceLvl ? StringFormat("Grid BUY @%.2f", tk.ask) : "";
-         if(!Trade.Buy(CalLotSizeForPutOrder(), Symb, tk.ask, 0, 0, cmt))
+         if(!Trade.Buy(CalLotByZones(), Symb, tk.ask, 0, 0, cmt))
             Print("Buy grid failed. err=", _LastError);
          else return true;
       }
@@ -198,7 +201,7 @@ bool MaybeOpenNext(Direction dir)
       {
          Trade.SetExpertMagicNumber(InpMagic);
          string cmt = InpCommentPriceLvl ? StringFormat("Grid SELL @%.2f", tk.bid) : "";
-         if(!Trade.Sell(CalLotSizeForPutOrder(), Symb, tk.bid, 0, 0, cmt))
+         if(!Trade.Sell(CalLotByZones(), Symb, tk.bid, 0, 0, cmt))
             Print("Sell grid failed. err=", _LastError);
          else return true;
       }
