@@ -174,12 +174,6 @@ bool OpenMarket(Side sd, double lots)
    MqlTradeRequest  req;
    MqlTradeResult   res;
    ZeroMemory(req); ZeroMemory(res);
-   
-   double tpPrice = 0;
-   if (InputEnableTP) {
-      if (sd == SIDE_BUY) tpPrice = CalTagetPrice(SYMBOL_ASK, InpGridTPPoints, SIDE_BUY);
-      else tpPrice = CalTagetPrice(SYMBOL_BID, InpGridTPPoints, SIDE_SELL);
-   }
 
    req.action   = TRADE_ACTION_DEAL;
    req.symbol   = Sym;
@@ -190,14 +184,15 @@ bool OpenMarket(Side sd, double lots)
    {
       req.type   = ORDER_TYPE_BUY;
       req.price  = SymbolInfoDouble(Sym, SYMBOL_ASK);
+      if (InputEnableTP) req.tp = CalTagetPrice(SYMBOL_ASK, InpGridTPPoints, SIDE_BUY);
    }
    else
    {
       req.type   = ORDER_TYPE_SELL;
       req.price  = SymbolInfoDouble(Sym, SYMBOL_BID);
+      if (InputEnableTP) req.tp = CalTagetPrice(SYMBOL_BID, InpGridTPPoints, SIDE_SELL);
    }
    req.volume  = lots;
-   req.tp      = tpPrice;
 
    bool ok = OrderSend(req, res);
    if(!ok || res.retcode!=10009 /*TRADE_RETCODE_DONE*/)
