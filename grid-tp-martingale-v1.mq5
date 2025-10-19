@@ -11,23 +11,23 @@ CTrade Trade;
 
 //------------------------- Inputs ----------------------------------
 enum Direction { DIR_BUY=0, DIR_SELL=1 };
+enum GridType { GRID_AVG_CLOSE=0, GRID_TP=1 };
 
 input Direction  InpDirection        = DIR_BUY;   // หน้าเทรด: Buy / Sell
+input GridType   InpGridType         = GRID_TP;
 input double     InpLots             = 0.01;      // Lot ต่อออเดอร์
 input int        InpGridStepPoints   = 5000;       // ระยะห่างกริด (จุด)
-input int        InpProfitTargetPts  = 3000;       // กำไรสะสม(จุด) เพื่อปิดทั้งชุด
+input int        InpProfitTargetPts  = 5000;       // กำไรสะสม(จุด) เพื่อปิดทั้งชุด
 input int        InpSlippage         = 20;        // Slippage (points)
 input int        InpMaxOrders        = 0;         // จำกัดจำนวนออเดอร์ (0=ไม่จำกัด)
-input long       InpMagic            = 660077;    // Magic number
+input long       InpMagic            = 20251019;    // Magic number
 input bool       InpCommentPriceLvl  = true;      // เขียนระดับราคาใน comment
 
 // ความปลอดภัย: ป้องกันเปิดซ้ำระดับเดิม (เช็คช่วงกันชน 15% ของกริด)
 input double     InpNoDupLevelRatio  = 0.0;      // 0.15*GridStep เป็นช่วงกันชน // 0 = ไม่ Block ช่วงราคา เข้าออเดอร์ได้เลย
+input double   InpMartingale = 1.1;
+input double   InpMaxLots = 0.5;
 
-input double   InpMartingaleMultiply = 1.1;
-
-input bool     InputEnableTP  = true;    // Enable TP: true = Enable & false = Disable
-input int      InpGridTPPoints   = 5000;  // ระยะTP (จุด)
 
 //------------------------- State -----------------------------------
 string Symb;
@@ -74,7 +74,7 @@ double CalTagetPrice(double current_price, int points) // Buy -> ask, Sell -> bi
    double point_size = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
    
    // คำนวณการเปลี่ยนแปลงของราคา
-   double price_change = InpGridTPPoints * point_size;
+   double price_change = InpProfitTargetPts * point_size;
    
    //double current_price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
    
@@ -172,9 +172,9 @@ bool OpenStarter(Direction dir)
    bool ok=false;
    
    double tpPrice = 0;
-   if (InputEnableTP) {
-      if(dir==DIR_BUY) tpPrice = CalTagetPrice(tk.ask, InpGridTPPoints);
-      else tpPrice = CalTagetPrice(tk.bid, InpGridTPPoints);
+   if (InpGridType == GRID_TP) {
+      if(dir==DIR_BUY) tpPrice = CalTagetPrice(tk.ask, InpProfitTargetPts);
+      else tpPrice = CalTagetPrice(tk.bid, InpProfitTargetPts);
    }
    
    if(dir==DIR_BUY) ok = Trade.Buy(InpLots, Symb, tk.ask, 0, tpPrice, cmt);
@@ -196,12 +196,13 @@ bool MaybeOpenNext(Direction dir)
    MqlTick tk; if(!SymbolInfoTick(Symb, tk)) return false;
    
    double tpPrice = 0;
-   if (InputEnableTP) {
-      if(dir==DIR_BUY) tpPrice = CalTagetPrice(tk.ask, InpGridTPPoints);
-      else tpPrice = CalTagetPrice(tk.bid, InpGridTPPoints);
+   if (InpGridType == GRID_TP) {
+      if(dir==DIR_BUY) tpPrice = CalTagetPrice(tk.ask, InpProfitTargetPts);
+      else tpPrice = CalTagetPrice(tk.bid, InpProfitTargetPts);
    }
    
-   double nextLots = NormalizeDouble(InpLots * pow(InpMartingaleMultiply, CountOurPositions()), 2);
+   double nextLots = NormalizeDouble(InpLots * pow(InpMartingale, CountOurPositions()), 2);
+   if (nextLots > InpMaxLots) nextLots = InpMaxLots;
 
    if(dir==DIR_BUY)
    {
@@ -250,7 +251,7 @@ void OnTick()
    }
 
    // 2) เงื่อนไขกำไรสะสมถึงเป้า (เป็น “จุดสุทธิรวม”)
-   if (!InputEnableTP) {
+   if (InpGridType == GRID_AVG_CLOSE) {
       double netPts = SumNetPoints();
       if(netPts >= InpProfitTargetPts)
       {
