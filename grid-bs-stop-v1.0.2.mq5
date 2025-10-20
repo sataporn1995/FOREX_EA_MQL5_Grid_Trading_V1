@@ -444,11 +444,102 @@ void MaintainSide(bool isBuy){
    }
 }
 
+// เติม/ตัด Pending ให้ครบตาม InpMaxPendingsPerSide อย่างเหมาะสมกับตลาดปัจจุบัน
+void EnsureFullSide(const bool isBuy){
+   if( (isBuy && InpMode==MODE_SELL_ONLY) || (!isBuy && InpMode==MODE_BUY_ONLY) ) return;
+
+   const double step = PointsToPrice(InpGridStepPoints);
+   const double ask  = SymbolInfoDouble(Sym, SYMBOL_ASK);
+   const double bid  = SymbolInfoDouble(Sym, SYMBOL_BID);
+
+   // รวบรวมออเดอร์ปัจจุบัน
+   double arr[]; int n = CollectOurPendingPrices(isBuy, arr);
+
+   // 1) ถ้ายังไม่มีเลย → seed ให้ครบตามกติกา (เหนือ Ask สำหรับ BuyStop, ใต้ Bid สำหรับ SellStop)
+   if(n==0){
+      if(isBuy){
+         double base = NormalizePrice(MathCeil(ask/Pt)*Pt); // buy stop ต้อง > ask
+         for(int k=0;k<InpMaxPendingsPerSide;k++){
+            double lvl = base + k*step;
+            if(IsLevelFree(lvl)) PlacePending(true, lvl);
+         }
+      }else{
+         double base = NormalizePrice(MathFloor(bid/Pt)*Pt); // sell stop ต้อง < bid
+         for(int k=0;k<InpMaxPendingsPerSide;k++){
+            double lvl = base - k*step;
+            if(IsLevelFree(lvl)) PlacePending(false, lvl);
+         }
+      }
+      return;
+   }
+
+   // 2) ถ้ามีมากเกิน → ตัดส่วนเกิน: Buy ตัด "บนสุด" ก่อน, Sell ตัด "ล่างสุด" ก่อน (สอดคล้องกับการเลื่อนหน้าต่าง)
+   if(n > InpMaxPendingsPerSide){
+      int excess = n - InpMaxPendingsPerSide;
+      for(int i=0;i<excess;i++){
+         if(isBuy) DeletePendingAtPrice(true,  arr[n-1-i]); // buy: ตัดบน
+         else      DeletePendingAtPrice(false, arr[0+i]);   // sell: ตัดล่าง
+      }
+      // อัปเดตรายการ
+      n = CollectOurPendingPrices(isBuy, arr);
+   }
+
+   // 3) ถ้ายังขาด → เติมให้ครบ
+   //    หลักการ: รักษา "หน้าต่าง" ให้ต่อเนื่องตามทิศที่เหมาะกับประเภทคำสั่ง
+   //    - BuyStop: ต่อเติม "เหนือสุด" ไปทีละ step (ให้ราคา > ask เสมอ)
+   //    - SellStop: ต่อเติม "ใต้สุด" ไปทีละ step (ให้ราคา < bid เสมอ)
+   int guard = 0; // กันลูปค้าง
+   while(n < InpMaxPendingsPerSide && guard++ < 10){
+      double lvl = 0.0;
+
+      if(isBuy){
+         // เริ่มจากบนสุดเดิม แล้วต่อขึ้นไป
+         double highest = arr[n-1];
+         double cand    = NormalizePrice(highest + step);
+
+         // ให้แน่ใจว่าเป็น BuyStop ที่ถูกเงื่อนไขตลาด (ต้อง > ask)
+         if(cand <= ask){
+            int hops = (int)MathCeil((ask - cand)/step) + 1;
+            cand = NormalizePrice(cand + hops*step);
+         }
+         lvl = cand;
+      }else{
+         // เริ่มจากล่างสุดเดิม แล้วต่อให้ต่ำลงไป
+         double lowest = arr[0];
+         double cand   = NormalizePrice(lowest - step);
+
+         // ให้แน่ใจว่าเป็น SellStop ที่ถูกเงื่อนไขตลาด (ต้อง < bid)
+         if(cand >= bid){
+            int hops = (int)MathCeil((cand - bid)/step) + 1;
+            cand = NormalizePrice(cand - hops*step);
+         }
+         lvl = cand;
+      }
+
+      // กันซ้ำระดับ และลองขยับทีละ step ถ้าโดนชนกับ order/position เดิม
+      int tries = 0;
+      while(tries++ < 3 && !IsLevelFree(lvl)){
+         lvl = isBuy ? NormalizePrice(lvl + step) : NormalizePrice(lvl - step);
+      }
+
+      if(IsLevelFree(lvl) && PlacePending(isBuy, lvl)){
+         // อัปเดตรายการให้เรียง ASC ใหม่
+         n = CollectOurPendingPrices(isBuy, arr);
+      }else{
+         // ถ้าเติมไม่ได้ (เช่น โบรก/ตลาดปฏิเสธระดับราคา) ก็หยุดเพื่อหลีกเลี่ยง spam
+         break;
+      }
+   }
+}
+
 void OnTick(){
    if(!g_enabled){ if(InpShowHUD) DrawHUD(); return; }
    SlideIfNeeded();
-   MaintainSide(true);
-   MaintainSide(false);
+   //MaintainSide(true);
+   //MaintainSide(false);
+   // เติม/ตัด ให้ "ครบตามจำนวน" ทุกติ๊ก
+   EnsureFullSide(true);   // ฝั่ง Buy Stop
+   EnsureFullSide(false);  // ฝั่ง Sell Stop
    if(InpShowHUD) DrawHUD();
 }
 
