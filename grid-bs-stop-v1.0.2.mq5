@@ -116,6 +116,7 @@ bool IsLevelFree(double level){
 // วาง Pending พร้อม TP (กรณี ECN จะ Modify ทีหลัง)
 bool PlacePending(bool isBuy, double level){
    if(!IsLevelFree(level)) return false;
+   if(!IsLevelFreeForSide(isBuy, level)) return false;
 
    MqlTradeRequest req; MqlTradeResult res; MqlTradeCheckResult  check_result;
    ZeroMemory(req); ZeroMemory(res); ZeroMemory(check_result);
@@ -442,6 +443,43 @@ void MaintainSide(bool isBuy){
       if(PlacePending(isBuy,newLevel)) n++;
       else break;
    }
+}
+
+// ตรวจว่ามี Position "ฝั่งเดียวกัน" อยู่ใกล้ level ในระยะ ±GridStep หรือไม่
+bool HasSameSidePositionNear(const bool isBuy, const double level){
+   const double tol = PointsToPrice(InpGridStepPoints) - 1e-10;
+   const int pt = (int)PositionsTotal();
+   for(int i=0;i<pt;i++){
+      if(!IsOurPositionByIndex(i)) continue;
+      long t = PositionGetInteger(POSITION_TYPE);
+      if( (isBuy && t!=POSITION_TYPE_BUY) || (!isBuy && t!=POSITION_TYPE_SELL) ) continue;
+      double p = PositionGetDouble(POSITION_PRICE_OPEN);
+      if(MathAbs(p - level) <= tol) return true;
+   }
+   return false;
+}
+
+// เดิมเราใช้ IsLevelFree(level) (เช็กทั้ง pending+positions ทุกฝั่ง)
+// เวอร์ชันใหม่นี้จะ "บังคับไม่ซ้ำกับ position ฝั่งเดียวกัน" ตามที่ต้องการ
+bool IsLevelFreeForSide(const bool isBuy, const double level){
+   const double tol = PointsToPrice(InpGridStepPoints) - 1e-10;
+
+   // 1) กันซ้ำกับ Pending ของเรา (ทั้งสองฝั่ง) — เหมือนเดิม
+   int ot=(int)OrdersTotal();
+   for(int i=0;i<ot;i++){
+      ulong ticket = OrderGetTicket(i);
+      if(ticket==0) continue;
+      if(!OrderSelect(ticket)) continue;
+      if(OrderGetString(ORDER_SYMBOL)!=Sym) continue;
+      if((long)OrderGetInteger(ORDER_MAGIC)!=InpMagic) continue;
+      double p=OrderGetDouble(ORDER_PRICE_OPEN);
+      if(MathAbs(p - level) <= tol) return false;
+   }
+
+   // 2) กันซ้ำเฉพาะกับ Position "ฝั่งเดียวกัน" เท่านั้น ตามเงื่อนไขที่ขอ
+   if(HasSameSidePositionNear(isBuy, level)) return false;
+
+   return true;
 }
 
 // เติม/ตัด Pending ให้ครบตาม InpMaxPendingsPerSide อย่างเหมาะสมกับตลาดปัจจุบัน
