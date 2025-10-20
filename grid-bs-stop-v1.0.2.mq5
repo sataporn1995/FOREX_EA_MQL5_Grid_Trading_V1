@@ -1,250 +1,386 @@
-//+------------------------------------------------------------------+
-//|                                    EA_GridTrading_PendingStops   |
-//| Grid Trading with BuyStop / SellStop pending orders              |
-//| Rules: Buy only / Sell only / Both; GridStep, TP points, Max N   |
-//| Rolling window grid that shifts with price, anti-duplicate guard |
-//+------------------------------------------------------------------+
 #property strict
+#property copyright "PPongShared x ChatGPT"
+#property version   "1.00"
+#property description "Grid Trading with Pending BuyStop/SellStop, auto-shift and anti-duplicate"
+
 #include <Trade/Trade.mqh>
+
+enum GridMode
+{
+   MODE_BUY_ONLY = 0,
+   MODE_SELL_ONLY = 1,
+   MODE_BUY_SELL = 2
+};
+
+input GridMode InpMode                  = MODE_BUY_SELL;  // Trading Mode
+input double   InpStartLot              = 0.01;           // Initial lot
+input int      InpGridStepPoints        = 5000;            // GridStep (points)
+input int      InpTPPoints              = 4000;            // TakeProfit (points)
+input int      InpMaxPendingsPerSide    = 5;              // Max pendings per side
+input ulong    InpMagic                 = 2025102001;       // Magic number
+input int      InpMaxSlippagePoints     = 30;             // Slippage (market ops)
+input bool     InpShowLevels            = true;           // Draw guide lines (debug)
+
 CTrade trade;
 
-//==================== Inputs =======================================
-enum GridMode { MODE_BUY_ONLY=0, MODE_SELL_ONLY=1, MODE_BOTH=2 };
-input GridMode InpMode             = MODE_BOTH;   // Trading side
-input double   InpLots             = 0.01;        // Initial lot
-input int      InpGridStepPoints   = 500;         // Grid step (points)
-input int      InpTPPoints         = 400;         // TP distance (points), pending pre-set
-input int      InpMaxPerSide       = 3;           // Max pending orders per side
-input int      InpSlippagePoints   = 20;          // Max deviation
-input ulong    InpMagic            = 20251020;    // Magic number
-input bool     InpUseRollingWindow = true;        // Maintain rolling grid when price moves
-input bool     InpAvoidSameGrid    = true;        // Avoid duplicates within ±GridStep
+// ---------- utilities ----------
+double  g_point      = 0.0;
+double  g_tick_size  = 0.0;
+double  g_tick_value = 0.0;
+int     g_digits     = 0;
+long    g_stops_level= 0;
 
-//==================== Globals ======================================
-double  g_point, g_tick, g_step_price; // basic increments
-int     g_digits;
+string  g_symbol;
 
-//==================== Helpers ======================================
-double TickSize()    { double v; return (SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE, v)? v : _Point); }
-double PointSize()   { return _Point; }
-int    DigitsCount() { return (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS); }
-
-// normalize price to nearest valid tick
-double NormPrice(double price)
+double NormalizeToTick(double price)
 {
-   double ts = g_tick;
-   if(ts<=0) ts = _Point;
-   double k = MathRound(price/ts);
-   return NormalizeDouble(k*ts, g_digits);
+   if(g_tick_size<=0.0) return price;
+   double steps = MathRound(price / g_tick_size);
+   return steps * g_tick_size;
 }
 
-// Align price upward to next grid boundary of step_sz
-double AlignUp(double price, double step_sz)
+double PointsToPrice(int pts){ return pts * g_point; }
+
+bool RefreshSym()
 {
-   double k = MathCeil(price/step_sz);
-   return NormPrice(k*step_sz);
+   g_symbol = _Symbol;
+   g_point  = SymbolInfoDouble(g_symbol, SYMBOL_POINT);
+   g_tick_size = SymbolInfoDouble(g_symbol, SYMBOL_TRADE_TICK_SIZE);
+   g_tick_value= SymbolInfoDouble(g_symbol, SYMBOL_TRADE_TICK_VALUE);
+   g_digits = (int)SymbolInfoInteger(g_symbol, SYMBOL_DIGITS);
+   g_stops_level = (long)SymbolInfoInteger(g_symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   return (g_point>0 && g_tick_size>0);
 }
 
-// Align price downward to previous grid boundary of step_sz
-double AlignDown(double price, double step_sz)
+// quantize เป็น “ช่องกริด” ด้วยจำนวนจุดของ GridStep
+long GridBucket(double price)
 {
-   double k = MathFloor(price/step_sz);
-   return NormPrice(k*step_sz);
+   double p_in_points = price / g_point;
+   return (long)MathRound(p_in_points / (double)InpGridStepPoints);
 }
 
-bool PriceOccupied(double p, ENUM_ORDER_TYPE type, double tol_points)
+bool PriceWithinSameGrid(double p1, double p2)
 {
-   string sym=_Symbol; ulong mg=InpMagic;
-   double tol = tol_points * g_point;
-   // Active positions (avoid placing at same grid span)
-   for(int i=0;i<PositionsTotal();++i){
-      ulong tk=PositionGetTicket(i);
-      if(PositionSelectByTicket(tk)){
-         if(PositionGetString(POSITION_SYMBOL)==sym && PositionGetInteger(POSITION_MAGIC)==(long)mg){
-            double op=PositionGetDouble(POSITION_PRICE_OPEN);
-            if(MathAbs(op-p) <= tol) return true;
-         }
+   // ถือว่า “ชนกัน” หากระยะห่าง < GridStep
+   return (MathAbs(p1 - p2) < PointsToPrice(InpGridStepPoints));
+}
+
+bool IsMyOrder(const ulong ticket)
+{
+   if(!OrderSelect(ticket)) return false;
+   if(OrderGetString(ORDER_SYMBOL)!=g_symbol) return false;
+   if((ulong)OrderGetInteger(ORDER_MAGIC) != InpMagic) return false;
+   return true;
+}
+
+bool IsMyPositionIdx(int idx)
+{
+   if(!PositionSelectByTicket(idx)) return false;
+   if(PositionGetString(POSITION_SYMBOL)!=g_symbol) return false;
+   if((ulong)PositionGetInteger(POSITION_MAGIC)!= InpMagic) return false;
+   return true;
+}
+
+// collect orders (pendings only of our EA and symbol)
+void CollectMyPendings(ENUM_ORDER_TYPE type_filter,
+                       ulong &tickets[], double &prices[])
+{
+   ArrayResize(tickets,0);
+   ArrayResize(prices,0);
+
+   int total = (int)OrdersTotal();
+   for(int i=0;i<total;i++)
+   {
+      ulong tk = OrderGetTicket(i);
+      if(tk==0) continue;
+      if(!OrderSelect(tk)) continue;
+
+      if(OrderGetString(ORDER_SYMBOL)!=g_symbol) continue;
+      if((ulong)OrderGetInteger(ORDER_MAGIC)!=InpMagic) continue;
+
+      ENUM_ORDER_TYPE t = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+      if(t==type_filter)
+      {
+         double pr = OrderGetDouble(ORDER_PRICE_OPEN);
+         int n = ArraySize(tickets);
+         ArrayResize(tickets,n+1);
+         ArrayResize(prices, n+1);
+         tickets[n]=tk;
+         prices[n]=pr;
       }
    }
-   // Pending orders
-   for(int j=0;j<OrdersTotal();++j){
-      if(OrderSelect(j)){
-         if(OrderGetString(ORDER_SYMBOL)==sym && (ulong)OrderGetInteger(ORDER_MAGIC)==mg){
-            ENUM_ORDER_TYPE t=(ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-            if(t==type){
-               double op=OrderGetDouble(ORDER_PRICE_OPEN);
-               if(MathAbs(op-p) <= tol) return true;
-            }
-         }
+}
+
+// collect my open positions (market)
+void CollectMyPositions(ENUM_POSITION_TYPE pos_filter,
+                        double &prices[])
+{
+   ArrayResize(prices,0);
+   int total = (int)PositionsTotal();
+   for(int i=0;i<total;i++)
+   {
+      if(!IsMyPositionIdx(i)) continue;
+      ENUM_POSITION_TYPE pt=(ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+      if(pt==pos_filter)
+      {
+         double pr = PositionGetDouble(POSITION_PRICE_OPEN);
+         int n = ArraySize(prices);
+         ArrayResize(prices, n+1);
+         prices[n]=pr;
       }
    }
+}
+
+// ป้องกันซ้ำ: มี pending/position อยู่ในช่องกริดเดียวกันหรือใกล้กว่า GridStep ไหม
+bool OccupiedAround(double level_price,
+                    const double &pend_prices[], const double &pos_prices[])
+{
+   for(int i=0;i<ArraySize(pend_prices);++i)
+      if(PriceWithinSameGrid(level_price, pend_prices[i])) return true;
+   for(int j=0;j<ArraySize(pos_prices);++j)
+      if(PriceWithinSameGrid(level_price, pos_prices[j])) return true;
    return false;
 }
 
-int CountSidePending(ENUM_ORDER_TYPE type, double &min_p, double &max_p)
+// ---------- placement & cancel ----------
+bool PlacePending(ENUM_ORDER_TYPE type, double price_level, double lots, double tp_points)
 {
-   int cnt=0; string sym=_Symbol; ulong mg=InpMagic;
-   min_p=DBL_MAX; max_p=-DBL_MAX;
-   for(int j=0;j<OrdersTotal();++j){
-      if(OrderSelect(j)){
-         if(OrderGetString(ORDER_SYMBOL)==sym && (ulong)OrderGetInteger(ORDER_MAGIC)==mg){
-            ENUM_ORDER_TYPE t=(ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-            if(t==type){
-               cnt++; double op=OrderGetDouble(ORDER_PRICE_OPEN);
-               if(op<min_p) min_p=op; if(op>max_p) max_p=op;
-            }
-         }
-      }
-   }
-   if(cnt==0){min_p=0; max_p=0;}
-   return cnt;
-}
+   MqlTradeRequest  req;
+   MqlTradeResult   res;
+   ZeroMemory(req); ZeroMemory(res);
 
-// Collect tickets for this side, sorted by price asc
-void CollectSideTickets(ENUM_ORDER_TYPE type, ulong &tickets[] , double &prices[])
-{
-   ArrayResize(tickets,0); ArrayResize(prices,0);
-   struct Item { double p; ulong tk; };
-   Item arr[]; int n=0;
-   for(int j=0;j<OrdersTotal();++j){
-      if(OrderSelect(j)){
-         if(OrderGetString(ORDER_SYMBOL)==_Symbol && (ulong)OrderGetInteger(ORDER_MAGIC)==InpMagic){
-            if((ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE)==type){
-               Item it; it.p=OrderGetDouble(ORDER_PRICE_OPEN); it.tk=OrderGetInteger(ORDER_TICKET);
-               ArrayResize(arr, n+1); arr[n++]=it;
-            }
-         }
-      }
-   }
-   // sort asc
-   for(int i=0;i<n-1;i++) for(int k=i+1;k<n;k++) if(arr[i].p>arr[k].p){ Item t=arr[i]; arr[i]=arr[k]; arr[k]=t; }
-   ArrayResize(tickets,n); ArrayResize(prices,n);
-   for(int i=0;i<n;i++){ tickets[i]=arr[i].tk; prices[i]=arr[i].p; }
-}
+   req.action = TRADE_ACTION_PENDING;
+   req.symbol = g_symbol;
+   req.magic  = (long)InpMagic;
+   req.volume = lots;
+   req.deviation = InpMaxSlippagePoints;
 
-bool PlacePending(ENUM_ORDER_TYPE type, double price)
-{
-   price = NormPrice(price);
-   trade.SetExpertMagicNumber(InpMagic);
-   trade.SetDeviationInPoints(InpSlippagePoints);
-   double tp=0, sl=0; // only TP per spec
-   double step_tp = InpTPPoints * g_point;
-   if(type==ORDER_TYPE_BUY_STOP){ tp = NormPrice(price + step_tp); }
-   else if(type==ORDER_TYPE_SELL_STOP){ tp = NormPrice(price - step_tp); }
+   price_level = NormalizeToTick(price_level);
 
-   MqlTradeResult res;
-   bool ok=false;
    if(type==ORDER_TYPE_BUY_STOP)
-      ok = trade.BuyStop(InpLots, price, _Symbol, sl, tp);
+   {
+      req.type  = ORDER_TYPE_BUY_STOP;
+      req.price = price_level;
+
+      double tp = price_level + PointsToPrice((int)tp_points);
+      req.tp = NormalizeDouble(tp, g_digits);
+   }
    else if(type==ORDER_TYPE_SELL_STOP)
-      ok = trade.SellStop(InpLots, price, _Symbol, sl, tp);
+   {
+      req.type  = ORDER_TYPE_SELL_STOP;
+      req.price = price_level;
 
-   if(!ok) Print("[ERR] PlacePending failed type=",(int)type," price=",DoubleToString(price,g_digits)," err=",GetLastError());
-   return ok;
+      double tp = price_level - PointsToPrice((int)tp_points);
+      req.tp = NormalizeDouble(tp, g_digits);
+   }
+   else
+      return false;
+
+   // ระยะห้ามวางใกล้ตลาดเกิน stop level
+   double ask = SymbolInfoDouble(g_symbol, SYMBOL_ASK);
+   double bid = SymbolInfoDouble(g_symbol, SYMBOL_BID);
+   double min_dist = g_stops_level * g_point;
+
+   if(type==ORDER_TYPE_BUY_STOP && (req.price - ask) < min_dist)
+      req.price = NormalizeToTick(ask + min_dist);
+   if(type==ORDER_TYPE_SELL_STOP && (bid - req.price) < min_dist)
+      req.price = NormalizeToTick(bid - min_dist);
+
+   bool ok = OrderSend(req, res);
+   return ok && (res.retcode==TRADE_RETCODE_DONE || res.retcode==TRADE_RETCODE_PLACED);
 }
 
-bool DeleteOrder(ulong ticket)
+bool CancelOrder(ulong ticket)
 {
-   trade.SetExpertMagicNumber(InpMagic);
-   bool ok = trade.OrderDelete(ticket);
-   if(!ok) Print("[ERR] Delete order ",ticket," failed err=",GetLastError());
-   return ok;
+   if(!OrderSelect(ticket)) return false;
+   return trade.OrderDelete(ticket);
 }
 
-// Build desired grid levels for a side and reconcile with market
-void MaintainSide(ENUM_ORDER_TYPE type)
+// ---------- compute target grids ----------
+/*
+   Buy Stop: วาง “เหนือ” ราคา Ask:
+   - เริ่มจาก level ล่างสุด = ceil((Ask)/step)*step
+   - ต่อเนื่องขึ้นไปทีละ GridStep
+*/
+void ComputeBuyStopLevels(double ask, double &levels[])
 {
-   if(InpMaxPerSide<=0) return;
-   double step_sz = InpGridStepPoints * g_point;
-   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   ArrayResize(levels, 0);
+   double step = PointsToPrice(InpGridStepPoints);
+   double start = MathCeil(ask / step) * step;
 
-   // Base anchor aligned to grid from current price
-   double base;
-   if(type==ORDER_TYPE_BUY_STOP) base = AlignUp(ask + 1e-8, step_sz); // strictly above Ask
-   else                          base = AlignDown(bid - 1e-8, step_sz); // strictly below Bid
-
-   // Desired grid set
-   double desired[]; ArrayResize(desired, InpMaxPerSide);
-   if(type==ORDER_TYPE_BUY_STOP){
-      for(int i=0;i<InpMaxPerSide;i++) desired[i] = base + i*step_sz;
-   } else {
-      for(int i=0;i<InpMaxPerSide;i++) desired[i] = base - i*step_sz;
+   for(int i=0;i<InpMaxPendingsPerSide;i++)
+   {
+      int n = ArraySize(levels);
+      ArrayResize(levels, n+1);
+      levels[n] = NormalizeToTick(start + step*i);
    }
+}
 
-   // Collect existing
-   ulong tickets[]; double prices[]; CollectSideTickets(type, tickets, prices);
+/*
+   Sell Stop: วาง “ต่ำกว่า” ราคา Bid:
+   - เริ่มจาก level บนสุด = floor((Bid)/step)*step
+   - ไล่ลงทีละ GridStep
+*/
+void ComputeSellStopLevels(double bid, double &levels[])
+{
+   ArrayResize(levels, 0);
+   double step = PointsToPrice(InpGridStepPoints);
+   double start = MathFloor(bid / step) * step;
 
-   // Delete orders not on desired grid (or too close) to keep strict spacing
-   for(int i=0;i<ArraySize(tickets);++i){
-      bool keep=false;
-      for(int d=0; d<ArraySize(desired); ++d){
-         if(MathAbs(prices[i]-desired[d]) <= 0.25*step_sz) { keep=true; break; }
-      }
-      if(!keep) DeleteOrder(tickets[i]);
+   for(int i=0;i<InpMaxPendingsPerSide;i++)
+   {
+      int n = ArraySize(levels);
+      ArrayResize(levels, n+1);
+      levels[n] = NormalizeToTick(start - step*i);
    }
+}
 
-   // Re-collect after deletions
-   CollectSideTickets(type, tickets, prices);
+// ปรับหน้าต่าง (auto-shift): หากราคาเลยขอบกริดมากกว่า 1*GridStep ให้ “ขยับหน้าต่าง” อิงราคาปัจจุบัน
+void AutoShiftBuyLevels(double ask, double &levels[])
+{
+   if(ArraySize(levels)==0) return;
+   double step = PointsToPrice(InpGridStepPoints);
 
-   // Add missing desired levels
-   for(int d=0; d<ArraySize(desired); ++d){
+   // ถ้าราคาลงต่ำกว่า “BuyStop ล่างสุด” มากกว่า 1 step ⇒ คำนวณชุดใหม่จากราคา
+   double lowest = levels[0];
+   if(ask + step < lowest)
+      ComputeBuyStopLevels(ask, levels);
+}
+
+void AutoShiftSellLevels(double bid, double &levels[])
+{
+   if(ArraySize(levels)==0) return;
+   double step = PointsToPrice(InpGridStepPoints);
+
+   // ถ้าราคาขึ้นสูงกว่า “SellStop บนสุด” มากกว่า 1 step ⇒ คำนวณชุดใหม่จากราคา
+   double highest = levels[0];
+   if(bid - step > highest)
+      ComputeSellStopLevels(bid, levels);
+}
+
+// สร้าง/ซิงค์ pending orders ให้ตรงกับ levels เป้าหมาย + ลบส่วนเกิน + ป้องกันชนกริด
+void SyncSide(ENUM_ORDER_TYPE side_type,
+              const double &target_levels[],
+              const double &pend_prices[], const ulong &pend_tickets[],
+              const double &pos_prices[])
+{
+   // 1) ยกเลิกคำสั่งที่ “ไม่อยู่” ใน target levels (ถือว่าเลื่อนหน้าต่างแล้ว)
+   for(int i=0;i<ArraySize(pend_tickets);++i)
+   {
       bool found=false;
-      for(int i=0;i<ArraySize(prices);++i){ if(MathAbs(prices[i]-desired[d]) <= 0.25*step_sz) { found=true; break; } }
-      if(!found){
-         if(!InpAvoidSameGrid || !PriceOccupied(desired[d], type, InpGridStepPoints))
-            PlacePending(type, desired[d]);
+      for(int j=0;j<ArraySize(target_levels);++j)
+      {
+         if(MathAbs(pend_prices[i]-target_levels[j]) < (g_tick_size/2.0))
+         { found=true; break; }
       }
+      if(!found)
+         CancelOrder(pend_tickets[i]);
    }
 
-   // Rolling window behavior is naturally satisfied by the dynamic base recompute.
+   // 2) เติมที่ขาด โดยเลี่ยงชนกริดกับ pending/position ปัจจุบัน
+   // เก็บราคาที่เหลือหลังยกเลิก (รีเฟรชสั้นๆ)
+   ulong tk2[]; double pr2[];
+   CollectMyPendings(side_type, tk2, pr2);
+
+   for(int j=0;j<ArraySize(target_levels);++j)
+   {
+      bool already=false;
+      for(int i=0;i<ArraySize(pr2);++i)
+         if(MathAbs(pr2[i]-target_levels[j]) < (g_tick_size/2.0)) { already=true; break; }
+
+      if(already) continue;
+
+      // anti-duplicate: ห้ามมี pending/position ใน ±GridStep
+      if(OccupiedAround(target_levels[j], pr2, pos_prices)) continue;
+
+      PlacePending(side_type, target_levels[j], InpStartLot, InpTPPoints);
+
+      // อัปเดตรายการชั่วคราว
+      int n=ArraySize(pr2);
+      ArrayResize(pr2, n+1);
+      pr2[n]=target_levels[j];
+   }
 }
 
-//==================== Lifecycle ====================================
+// ---------- drawing (optional) ----------
+void DrawGuideLines(const string name_prefix, const double &levels[], color clr)
+{
+   if(!InpShowLevels) return;
+   for(int i=0;i<ArraySize(levels);++i)
+   {
+      string nm = name_prefix + IntegerToString(i);
+      if(ObjectFind(0, nm)==-1)
+      {
+         ObjectCreate(0, nm, OBJ_HLINE, 0, 0, levels[i]);
+         ObjectSetInteger(0, nm, OBJPROP_COLOR, clr);
+         ObjectSetInteger(0, nm, OBJPROP_STYLE, STYLE_DOT);
+      }
+      ObjectSetDouble(0, nm, OBJPROP_PRICE, levels[i]);
+   }
+}
+
+// ---------- EA lifecycle ----------
 int OnInit()
 {
-   g_point  = PointSize();
-   g_tick   = TickSize();
-   g_digits = DigitsCount();
-   g_step_price = InpGridStepPoints * g_point;
+   if(!RefreshSym())
+   {
+      Print("Failed to load symbol info");
+      return(INIT_FAILED);
+   }
+   trade.SetExpertMagicNumber((int)InpMagic);
    return(INIT_SUCCEEDED);
 }
 
 void OnTick()
 {
-   if(InpMode==MODE_BUY_ONLY || InpMode==MODE_BOTH)
-      MaintainSide(ORDER_TYPE_BUY_STOP);
-   if(InpMode==MODE_SELL_ONLY || InpMode==MODE_BOTH)
-      MaintainSide(ORDER_TYPE_SELL_STOP);
-}
+   if(!RefreshSym()) return;
 
-// Replenish quickly when TP closes positions
-void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &req,const MqlTradeResult &res)
-{
-   if(trans.type==TRADE_TRANSACTION_DEAL_ADD){
-      long   deal_entry = (long)HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
-      long   reason     = (long)HistoryDealGetInteger(trans.deal, DEAL_REASON);
-      string sym        = HistoryDealGetString(trans.deal, DEAL_SYMBOL);
-      ulong  magic      = (ulong)HistoryDealGetInteger(trans.deal, DEAL_MAGIC);
-      if(sym==_Symbol && magic==InpMagic && deal_entry==DEAL_ENTRY_OUT && reason==DEAL_REASON_TP){
-         // A TP just happened: rebuild grids immediately
-         if(InpMode==MODE_BUY_ONLY || InpMode==MODE_BOTH)
-            MaintainSide(ORDER_TYPE_BUY_STOP);
-         if(InpMode==MODE_SELL_ONLY || InpMode==MODE_BOTH)
-            MaintainSide(ORDER_TYPE_SELL_STOP);
-      }
+   const double ask = SymbolInfoDouble(g_symbol, SYMBOL_ASK);
+   const double bid = SymbolInfoDouble(g_symbol, SYMBOL_BID);
+
+   // --- เตรียมข้อมูลฝั่ง Buy (Buy Stop) ---
+   double buy_target_levels[];
+   if(InpMode==MODE_BUY_ONLY || InpMode==MODE_BUY_SELL)
+      ComputeBuyStopLevels(ask, buy_target_levels);
+
+   // --- เตรียมข้อมูลฝั่ง Sell (Sell Stop) ---
+   double sell_target_levels[];
+   if(InpMode==MODE_SELL_ONLY || InpMode==MODE_BUY_SELL)
+      ComputeSellStopLevels(bid, sell_target_levels);
+
+   // auto-shift ตามข้อ 6.x
+   if(ArraySize(buy_target_levels)>0)  AutoShiftBuyLevels(ask, buy_target_levels);
+   if(ArraySize(sell_target_levels)>0) AutoShiftSellLevels(bid, sell_target_levels);
+
+   // เก็บสถานะปัจจุบัน
+   ulong  buy_tk[];  double buy_pr[];
+   ulong  sell_tk[]; double sell_pr[];
+   double pos_buy_pr[];  double pos_sell_pr[];
+
+   if(InpMode==MODE_BUY_ONLY || InpMode==MODE_BUY_SELL)
+   {
+      CollectMyPendings(ORDER_TYPE_BUY_STOP, buy_tk, buy_pr);
+      CollectMyPositions(POSITION_TYPE_BUY, pos_buy_pr);
+   }
+   if(InpMode==MODE_SELL_ONLY || InpMode==MODE_BUY_SELL)
+   {
+      CollectMyPendings(ORDER_TYPE_SELL_STOP, sell_tk, sell_pr);
+      CollectMyPositions(POSITION_TYPE_SELL, pos_sell_pr);
+   }
+
+   // ซิงค์ให้เท่ากับ target levels + ป้องกันซ้ำในกริดเดียวกัน
+   if(ArraySize(buy_target_levels)>0)
+      SyncSide(ORDER_TYPE_BUY_STOP,  buy_target_levels, buy_pr, buy_tk, pos_buy_pr);
+
+   if(ArraySize(sell_target_levels)>0)
+      SyncSide(ORDER_TYPE_SELL_STOP, sell_target_levels, sell_pr, sell_tk, pos_sell_pr);
+
+   // วาดเส้นไกด์ (optional)
+   if(InpShowLevels)
+   {
+      if(ArraySize(buy_target_levels)>0)
+         DrawGuideLines("BUY_LEVEL_",  buy_target_levels,  clrLime);
+      if(ArraySize(sell_target_levels)>0)
+         DrawGuideLines("SELL_LEVEL_", sell_target_levels, clrTomato);
    }
 }
-
-//==================== Notes ========================================
-// • Pending grid keeps exactly InpMaxPerSide orders per allowed side at
-//   distances of InpGridStepPoints. Prices are aligned to valid tick size.
-// • BuyStop levels: starting just above current Ask, then +step, +2*step, ...
-//   SellStop levels: starting just below current Bid, then -step, -2*step, ...
-// • TP is preset on the pending orders: BuyStop TP = +TPPoints; SellStop TP = -TPPoints.
-// • Anti-duplicate: before placing, EA checks no positions or pendings exist
-//   within ±GridStep around the target price (same side & magic & symbol).
-// • Rolling window: as price drifts by ≥ one grid, the desired set shifts and the
-//   EA deletes off-grid orders and adds new ones beyond the extreme.
-// • If you need SL, trailing, or martingale sizing, they can be added easily.
-//+------------------------------------------------------------------+
