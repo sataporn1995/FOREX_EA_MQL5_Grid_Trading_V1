@@ -378,8 +378,7 @@ void OnTick()
    isCrossUp = rsiAndStochFilterArray[0];
    isCrossDown = rsiAndStochFilterArray[1];
    
-   Trend currentTrend;
-   if (InpEnableTrendFilter) currentTrend = FilterTrend();
+   Trend currentTrend = FilterTrend();
    
    bool isTradeZone = ValidateZone();
    bool isNewBar = IsNewBar(InpNewBarTF);
