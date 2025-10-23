@@ -66,7 +66,7 @@ int stochHandle = INVALID_HANDLE;
 int emaFastHandle = INVALID_HANDLE;
 int emaSlowHandle = INVALID_HANDLE;
 
-bool IsNewBar(ENUM_TIMEFRAMES tf)
+/*bool IsNewBar(ENUM_TIMEFRAMES tf)
 {
    MqlRates r[];
    if(CopyRates(_Symbol, tf, 0, 2, r) != 2) return false;
@@ -76,14 +76,23 @@ bool IsNewBar(ENUM_TIMEFRAMES tf)
       return true;
    }
    return false;
+}*/
+
+bool IsNewBar(ENUM_TIMEFRAMES tf)
+{
+   static datetime last_time[9]; // พอสำหรับ TF ยอดฮิต; หรือ map เอง
+   int idx = (int)tf % 9;        // ทางลัดแบบง่าย
+   MqlRates r[]; if(CopyRates(_Symbol, tf, 0, 2, r) != 2) return false;
+   if(last_time[idx] != r[0].time){ last_time[idx]=r[0].time; return true; }
+   return false;
 }
 
 //------------------------- Helpers ---------------------------------
-bool IsOurPosition(int index)
+bool IsOurPositionByIndex(int pos_index)
 {
-   if(!PositionSelectByTicket(index)) return false;
-   if(PositionGetString(POSITION_SYMBOL) != Symb) return false;
-   if(PositionGetInteger(POSITION_MAGIC) != InpMagic) return false;
+   if(!PositionSelectByTicket(pos_index)) return false;
+   if(PositionGetString(POSITION_SYMBOL) != _Symbol) return false;
+   if((long)PositionGetInteger(POSITION_MAGIC) != InpMagic) return false;
    return true;
 }
 
@@ -91,7 +100,7 @@ int CountOurPositions()
 {
    int total=0;
    for(int i=0;i<PositionsTotal();i++)
-      if(IsOurPosition(i)) total++;
+      if(IsOurPositionByIndex(i)) total++;
    return total;
 }
 
@@ -114,30 +123,23 @@ double CalTagetPrice(double current_price, int points) // Buy -> ask, Sell -> bi
    return NormalizeDouble(target_price, digits);
 }
 
-bool IsBuyPos(int index)
+bool IsBuyPosByIndex(int pos_index)
 {
-   if(!PositionSelectByTicket(index)) return false;
+   if(!PositionSelectByTicket(pos_index)) return false;
    return (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY;
 }
 
 // ราคาของออเดอร์ล่าสุด (ตามเวลาเปิดล่าสุด) ของชุดนี้
 bool GetLastOpenPrice(double &price_out)
 {
-   datetime latest=0;
-   double   p     = 0.0;
-   bool     found = false;
+   datetime latest=0; double p=0; bool found=false;
    for(int i=0;i<PositionsTotal();i++)
    {
-      if(!IsOurPosition(i)) continue;
+      if(!IsOurPositionByIndex(i)) continue;
       datetime t = (datetime)PositionGetInteger(POSITION_TIME);
-      if(t>latest)
-      {
-         latest = t;
-         p = PositionGetDouble(POSITION_PRICE_OPEN);
-         found = true;
-      }
+      if(t>latest) { latest=t; p=PositionGetDouble(POSITION_PRICE_OPEN); found=true; }
    }
-   if(found) price_out = p;
+   if(found) price_out=p;
    return found;
 }
 
@@ -146,7 +148,7 @@ bool HasOrderNear(double targetPrice)
 {
    for(int i=0;i<PositionsTotal();i++)
    {
-      if(!IsOurPosition(i)) continue;
+      if(!IsOurPositionByIndex(i)) continue;
       double po = PositionGetDouble(POSITION_PRICE_OPEN);
       if(MathAbs(po - targetPrice) <= NoDupBand*_Point) return true;
    }
@@ -157,16 +159,14 @@ bool HasOrderNear(double targetPrice)
 double SumNetPoints()
 {
    double sumPts=0.0;
-   double bid = SymbolInfoDouble(Symb, SYMBOL_BID);
-   double ask = SymbolInfoDouble(Symb, SYMBOL_ASK);
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
    for(int i=0;i<PositionsTotal();i++)
    {
-      if(!IsOurPosition(i)) continue;
-      bool isBuy = IsBuyPos(i);
+      if(!IsOurPositionByIndex(i)) continue;
+      bool isBuy = IsBuyPosByIndex(i);
       double open = PositionGetDouble(POSITION_PRICE_OPEN);
-      double pts  = 0.0;
-      if(isBuy)  pts = (bid - open)/_Point;  // ใช้ bid สำหรับปิด buy
-      else       pts = (open - ask)/_Point;  // ใช้ ask สำหรับปิด sell
+      double pts  = isBuy ? (bid-open)/_Point : (open-ask)/_Point;
       sumPts += pts;
    }
    return sumPts;
@@ -175,17 +175,11 @@ double SumNetPoints()
 bool CloseAll()
 {
    bool ok=true;
-   // ปิดให้หมดทั้งชุดของ Symbol+Magic
    for(int i=PositionsTotal()-1;i>=0;i--)
    {
-      if(!IsOurPosition(i)) continue;
-      ulong ticket = (ulong)PositionGetInteger(POSITION_TICKET);
-      ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-      double lots = PositionGetDouble(POSITION_VOLUME);
-      if(type==POSITION_TYPE_BUY)
-         ok &= Trade.PositionClose(ticket, InpSlippage);
-      else
-         ok &= Trade.PositionClose(ticket, InpSlippage);
+      if(!IsOurPositionByIndex(i)) continue;
+      ulong ticket=(ulong)PositionGetInteger(POSITION_TICKET);
+      ok &= Trade.PositionClose(ticket, InpSlippage);
       if(!ok) Print("Close failed ticket=", ticket, " err=", _LastError);
    }
    return ok;
@@ -320,10 +314,14 @@ Trend FilterTrend() {
    //bool upTrend = (price > emaVal[0]);
    //bool downTrend = (price < emaVal[0]);
    
-   double f = iMA(_Symbol, InpTrendTF, InpEmaFast, 0, MODE_EMA, PRICE_CLOSE);
-   double s = iMA(_Symbol, InpTrendTF, InpEmaSlow, 0, MODE_EMA, PRICE_CLOSE);
+   //double f = iMA(_Symbol, InpTrendTF, InpEmaFast, 0, MODE_EMA, PRICE_CLOSE);
+   //double s = iMA(_Symbol, InpTrendTF, InpEmaSlow, 0, MODE_EMA, PRICE_CLOSE);
    
-   return (f > s) ? UPTREND: DOWNTREND;
+   //return (f > s) ? UPTREND: DOWNTREND;
+   double fArr[1], sArr[1];
+   if(CopyBuffer(emaFastHandle, 0, 1, 1, fArr) != 1) return SIDEWAY;
+   if(CopyBuffer(emaSlowHandle, 0, 1, 1, sArr) != 1) return SIDEWAY;
+   return (fArr[0] > sArr[0]) ? UPTREND : DOWNTREND;
 }
 
 bool ValidateZone() {
