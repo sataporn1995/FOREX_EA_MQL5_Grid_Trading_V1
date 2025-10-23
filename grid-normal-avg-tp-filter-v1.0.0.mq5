@@ -374,7 +374,7 @@ void OnTick()
    bool rsiAndStochFilterArray[];
    bool isCrossUp = false;
    bool isCrossDown = false;
-   if (InpEnableRsiStochFilter) FilterRsiAndStochCrossUpAndDown(rsiAndStochFilterArray); // Pass the array by reference
+   FilterRsiAndStochCrossUpAndDown(rsiAndStochFilterArray); // Pass the array by reference
    isCrossUp = rsiAndStochFilterArray[0];
    isCrossDown = rsiAndStochFilterArray[1];
    
@@ -415,7 +415,7 @@ void OnTick()
    }
 
    // 3) เปิดกริดถัดไปเมื่อราคาเดินทางสวนมาจนถึงระยะ GridStep จาก "ออเดอร์ล่าสุด"
-   MaybeOpenNext(InpDirection);
+   if (CountOurPositions() > 0) MaybeOpenNext(InpDirection);
    
    //Comment("Orders:" + CountOurPositions());
 }
