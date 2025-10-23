@@ -15,13 +15,13 @@ enum GridType { GRID_AVG_CLOSE=0, GRID_TP=1 };
 enum Trend { UPTREND=1, DOWNTREND=-1, SIDEWAY=0 };
 
 input Direction  InpDirection        = DIR_BUY;   // หน้าเทรด: Buy / Sell
-input GridType   InpGridType         = GRID_TP;
+input GridType   InpGridType         = GRID_AVG_CLOSE;
 input double     InpLots             = 0.01;      // Lot ต่อออเดอร์
-input int        InpGridStepPoints   = 5000;       // ระยะห่างกริด (จุด)
-input int        InpProfitTargetPts  = 5000;       // กำไรสะสม(จุด) เพื่อปิดทั้งชุด
+input int        InpGridStepPoints   = 15000;       // ระยะห่างกริด (จุด)
+input int        InpProfitTargetPts  = 15000;       // กำไรสะสม(จุด) เพื่อปิดทั้งชุด
 input int        InpSlippage         = 20;        // Slippage (points)
 input int        InpMaxOrders        = 0;         // จำกัดจำนวนออเดอร์ (0=ไม่จำกัด)
-input long       InpMagic            = 20251019001;    // Magic number
+input long       InpMagic            = 20251023001;    // Magic number
 input bool       InpCommentPriceLvl  = true;      // เขียนระดับราคาใน comment
 
 // ความปลอดภัย: ป้องกันเปิดซ้ำระดับเดิม (เช็คช่วงกันชน 15% ของกริด)
@@ -50,7 +50,8 @@ input ENUM_STO_PRICE   InpStochPrice = STO_LOWHIGH; // calculation method (Low/H
 input double           InpStochOversold = 30.0;
 input double           InpStochOverbought = 70.0;
 
-input bool             InpEnableTrendFilter = false;
+input bool             InpEnableTrendFilter = false; // เปิดตัวกรองการเทรดตามเทรนด์
+input Trend            InpTradeFollowTrend = UPTREND;
 input ENUM_TIMEFRAMES  InpTrendTF = PERIOD_H1;   // TF สำหรับเทรนด์
 input int              InpEmaFast = 50;
 input int              InpEmaSlow = 200;
@@ -325,6 +326,14 @@ Trend FilterTrend() {
    return (f > s) ? UPTREND: DOWNTREND;
 }
 
+bool ValidateZone() {
+   double price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   if (price >= InpUpperPrice && InpUpperPrice != 0.0) return false;
+   else if (price <= InpLowPrice && InpLowPrice != 0.0) return false;
+   
+   return true;
+}
+
 //------------------------- EA events --------------------------------
 int OnInit()
 {
@@ -363,6 +372,8 @@ void OnDeinit(const int reason)
 void OnTick()
 {
    if (InpEnableNewBar && !IsNewBar(InpNewBarTF)) return;
+   if (InpEnablePriceZone && !ValidateZone()) return;
+   if (InpEnableTrendFilter && FilterTrend() != InpTradeFollowTrend) return;
    
    bool rsiAndStochFilterArray[];
    bool isCrossUp = false;
