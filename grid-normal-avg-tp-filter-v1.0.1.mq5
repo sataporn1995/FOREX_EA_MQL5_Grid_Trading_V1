@@ -37,7 +37,7 @@ input ENUM_TIMEFRAMES  InpNewBarTF = PERIOD_M1; // TF แท่งแท่ง�
 input string   Input___Zone___Filter___     = "=== Zone FILTER ===";
 input bool       InpEnablePriceZone = false; // เปิด/ปิด กรอบราคาออกการเปิดออเดอร์
 input double     InpUpperPrice = 0.0; // กรอบราคาสูงสุด 0=ไม่กำหนด
-input double     InpLowerPrice = 0.0; // กรอบราคาต่ำสูง 0=ไม่กำหนด
+input double     InpLowerPrice = 0.0; // กรอบราคาต่ำสุด 0=ไม่กำหนด
 
 input string   Input___RSI___Filter___     = "=== RSI FILTER ===";
 input bool             InpEnableRsiFilter = true; // เปิด/ปิด ตัวกรอง RSI Indicator
