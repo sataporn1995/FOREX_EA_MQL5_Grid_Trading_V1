@@ -87,10 +87,28 @@ bool IsNewBar(ENUM_TIMEFRAMES tf)
    return false;
 }
 
+// ดึงทีละ ticket โดยใช้ index แล้วเลือกด้วย ticket แทน
+bool GetPositionByIndex_UsingTicket(int index)
+{
+   // ดึง ticket ของ position ตามลำดับ index
+   ulong ticket = PositionGetTicket(index);  // ✅ ไม่มีการเรียก GetPositionByIndex_UsingTicket
+   if(ticket == 0) return false;
+
+   // เลือก position ด้วย ticket
+   if(!PositionSelectByTicket(ticket)) return false;
+
+   // ตอนนี้สามารถอ่านข้อมูลได้
+   // ตัวอย่าง:
+   // string sym  = PositionGetString(POSITION_SYMBOL);
+   // long   type = PositionGetInteger(POSITION_TYPE);
+   return true;
+}
+
 //------------------------- Helpers ---------------------------------
 bool IsOurPositionByIndex(int pos_index)
 {
-   if(!PositionSelectByTicket(pos_index)) return false;
+   //if(!PositionSelectByTicket(pos_index)) return false;
+   if(!GetPositionByIndex_UsingTicket(pos_index)) return false;
    if(PositionGetString(POSITION_SYMBOL) != _Symbol) return false;
    if((long)PositionGetInteger(POSITION_MAGIC) != InpMagic) return false;
    return true;
@@ -125,7 +143,8 @@ double CalTagetPrice(double current_price, int points) // Buy -> ask, Sell -> bi
 
 bool IsBuyPosByIndex(int pos_index)
 {
-   if(!PositionSelectByTicket(pos_index)) return false;
+   //if(!PositionSelectByTicket(pos_index)) return false;
+   if(!GetPositionByIndex_UsingTicket(pos_index)) return false;
    return (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY;
 }
 
@@ -406,7 +425,7 @@ void OnTick()
             if (InpEnableNewBar && !isNewBar) return;
             if (InpEnablePriceZone && !isTradeZone) return;
             if (InpEnableTrendFilter && currentTrend != InpTradeFollowTrend) return;
-            OpenStarter(InpDirection);
+            if (CountOurPositions() == 0) OpenStarter(InpDirection);
          }
          return; // รอบนี้จบ
       }
