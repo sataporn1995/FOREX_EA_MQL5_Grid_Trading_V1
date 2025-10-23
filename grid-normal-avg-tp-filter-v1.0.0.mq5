@@ -370,11 +370,7 @@ void OnDeinit(const int reason)
 }
 
 void OnTick()
-{
-   if (InpEnableNewBar && !IsNewBar(InpNewBarTF)) return;
-   if (InpEnablePriceZone && !ValidateZone()) return;
-   if (InpEnableTrendFilter && FilterTrend() != InpTradeFollowTrend) return;
-   
+{  
    bool rsiAndStochFilterArray[];
    bool isCrossUp = false;
    bool isCrossDown = false;
@@ -384,12 +380,18 @@ void OnTick()
    
    Trend currentTrend;
    if (InpEnableTrendFilter) currentTrend = FilterTrend();
+   
+   bool isTradeZone = ValidateZone();
+   bool isNewBar = IsNewBar(InpNewBarTF);
 
    // 1) ถ้าไม่มีออเดอร์ -> เปิดเริ่มชุด
    if(CountOurPositions()==0)
    {
       if (InpEnableRsiStochFilter && InpDirection == DIR_BUY && !isCrossUp) return;
       if (InpEnableRsiStochFilter && InpDirection == DIR_SELL && !isCrossDown) return;
+      if (InpEnableNewBar && !isNewBar) return;
+      if (InpEnablePriceZone && !isTradeZone) return;
+      if (InpEnableTrendFilter && currentTrend != InpTradeFollowTrend) return;
       OpenStarter(InpDirection);
       return;
    }
@@ -404,6 +406,9 @@ void OnTick()
          {
             if (InpEnableRsiStochFilter && InpDirection == DIR_BUY && !isCrossUp) return;
             if (InpEnableRsiStochFilter && InpDirection == DIR_SELL && !isCrossDown) return;
+            if (InpEnableNewBar && !isNewBar) return;
+            if (InpEnablePriceZone && !isTradeZone) return;
+            if (InpEnableTrendFilter && currentTrend != InpTradeFollowTrend) return;
             OpenStarter(InpDirection);
          }
          return; // รอบนี้จบ
