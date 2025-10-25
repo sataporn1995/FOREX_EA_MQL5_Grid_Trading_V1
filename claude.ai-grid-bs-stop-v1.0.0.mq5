@@ -3,7 +3,7 @@
 //|                                                                  |
 //+------------------------------------------------------------------+
 #property copyright "Grid Trading System"
-#property version   "1.00"
+#property version   "1.10"
 #property strict
 
 //--- Input Parameters
@@ -16,26 +16,16 @@ enum ENUM_TRADE_MODE
 
 input ENUM_TRADE_MODE TradeMode = MODE_BOTH;        // โหมดการเทรด
 input double InitialLot = 0.01;                     // Lot เริ่มต้น
-input int GridStep = 5000;                           // ระยะห่างของ Grid (จุด)
-input int TakeProfit = 5000;                         // Take Profit (จุด)
-input int MaxPendingOrders = 5;                     // จำนวน Pending Orders สูงสุดต่อฝั่ง
-input double GridGap = 1.5;                         // ตัวคูณสำหรับปรับ Grid
-input int MagicNumber = 20251025001;                     // Magic Number
+input int GridStep = 500;                           // ระยะห่างของ Grid (จุด)
+input int TakeProfit = 400;                         // Take Profit (จุด)
+input int MaxPendingOrders = 3;                     // จำนวน Pending Orders สูงสุดต่อฝั่ง
+input double GridGap = 1.5;                         // ตัวคูณสำหรับปรับ Grid (เก่า)
+input int GridAdjustDistance = 800;                 // ระยะห่างสำหรับปรับ Grid (จุด)
+input int MagicNumber = 123456;                     // Magic Number
 
 //--- Global Variables
 double PointValue;
 int Digits_;
-
-//-------------------- Utils --------------------
-double NormalizeVolume(double vol){
-   double step  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-   double minv  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-   double maxv  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-   if(step<=0) step=0.01;
-   double v = MathMax(minv, MathMin(maxv, MathFloor(vol/step+1e-9)*step));
-   return v;
-}
-double NormalizePrice(double price){ return NormalizeDouble(price,(int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS)); }
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -88,31 +78,35 @@ void ManageBuyGrid()
       return;
    }
    
-   // หาราคา Pending Order Buy Stop ล่างสุดและบนสุด
-   double lowestBuyStop = GetLowestBuyStop();
-   double highestBuyStop = GetHighestBuyStop();
+   // หาราคา Buy ล่างสุด (รวมทั้ง Pending และ Active)
+   double lowestBuyPrice = GetLowestBuyPrice();
    
-   // ตรวจสอบว่ามี Order ถึง TP หรือไม่ และเพิ่ม Pending Order ใหม่
-   if(buyPendingCount < MaxPendingOrders)
+   // เงื่อนไขใหม่: ตรวจสอบว่าราคาลงห่างจากออเดอร์ล่างสุดเกิน GridAdjustDistance หรือไม่
+   double adjustDistance = GridAdjustDistance * PointValue;
+   
+   if(lowestBuyPrice > 0 && currentPrice < lowestBuyPrice - adjustDistance)
    {
-      double newPrice = highestBuyStop + (GridStep * PointValue);
-      if(!IsPriceOccupied(newPrice, ORDER_TYPE_BUY_STOP))
-         PlaceBuyStop(newPrice);
+      // ลบ Pending Buy Stop บนสุด
+      if(DeleteHighestBuyStop())
+      {
+         // เปิด Pending Buy Stop ใหม่ด้านล่าง ห่างจากล่างสุด GridStep
+         double newPrice = lowestBuyPrice - (GridStep * PointValue);
+         if(!IsPriceOccupiedBuy(newPrice))
+         {
+            PlaceBuyStop(newPrice);
+         }
+      }
    }
    
-   // ปรับ Grid เมื่อราคาลงต่ำ
-   double gapDistance = GridStep * GridGap * PointValue;
-   if(currentPrice < lowestBuyStop - gapDistance)
+   // ถ้ามี Pending น้อยกว่าสูงสุด ให้เพิ่มด้านบน
+   if(buyPendingCount < MaxPendingOrders)
    {
-      // เพิ่ม Pending Order ด้านล่าง
-      double newPrice = lowestBuyStop - (GridStep * PointValue);
-      if(!IsPriceOccupied(newPrice, ORDER_TYPE_BUY_STOP))
+      double highestBuyStop = GetHighestBuyStop();
+      if(highestBuyStop > 0)
       {
-         if(PlaceBuyStop(newPrice))
-         {
-            // ลบ Pending Order บนสุด
-            DeleteHighestBuyStop();
-         }
+         double newPrice = highestBuyStop + (GridStep * PointValue);
+         if(!IsPriceOccupiedBuy(newPrice))
+            PlaceBuyStop(newPrice);
       }
    }
 }
@@ -132,31 +126,35 @@ void ManageSellGrid()
       return;
    }
    
-   // หาราคา Pending Order Sell Stop บนสุดและล่างสุด
-   double highestSellStop = GetHighestSellStop();
-   double lowestSellStop = GetLowestSellStop();
+   // หาราคา Sell บนสุด (รวมทั้ง Pending และ Active)
+   double highestSellPrice = GetHighestSellPrice();
    
-   // ตรวจสอบว่ามี Order ถึง TP หรือไม่ และเพิ่ม Pending Order ใหม่
-   if(sellPendingCount < MaxPendingOrders)
+   // เงื่อนไขใหม่: ตรวจสอบว่าราคาขึ้นห่างจากออเดอร์บนสุดเกิน GridAdjustDistance หรือไม่
+   double adjustDistance = GridAdjustDistance * PointValue;
+   
+   if(highestSellPrice > 0 && currentPrice > highestSellPrice + adjustDistance)
    {
-      double newPrice = lowestSellStop - (GridStep * PointValue);
-      if(!IsPriceOccupied(newPrice, ORDER_TYPE_SELL_STOP))
-         PlaceSellStop(newPrice);
+      // ลบ Pending Sell Stop ล่างสุด
+      if(DeleteLowestSellStop())
+      {
+         // เปิด Pending Sell Stop ใหม่ด้านบน ห่างจากบนสุด GridStep
+         double newPrice = highestSellPrice + (GridStep * PointValue);
+         if(!IsPriceOccupiedSell(newPrice))
+         {
+            PlaceSellStop(newPrice);
+         }
+      }
    }
    
-   // ปรับ Grid เมื่อราคาขึ้นสูง
-   double gapDistance = GridStep * GridGap * PointValue;
-   if(currentPrice > highestSellStop + gapDistance)
+   // ถ้ามี Pending น้อยกว่าสูงสุด ให้เพิ่มด้านล่าง
+   if(sellPendingCount < MaxPendingOrders)
    {
-      // เพิ่ม Pending Order ด้านบน
-      double newPrice = highestSellStop + (GridStep * PointValue);
-      if(!IsPriceOccupied(newPrice, ORDER_TYPE_SELL_STOP))
+      double lowestSellStop = GetLowestSellStop();
+      if(lowestSellStop > 0)
       {
-         if(PlaceSellStop(newPrice))
-         {
-            // ลบ Pending Order ล่างสุด
-            DeleteLowestSellStop();
-         }
+         double newPrice = lowestSellStop - (GridStep * PointValue);
+         if(!IsPriceOccupiedSell(newPrice))
+            PlaceSellStop(newPrice);
       }
    }
 }
@@ -302,7 +300,7 @@ double GetLowestBuyStop()
       }
    }
    
-   return lowest;
+   return (lowest == DBL_MAX) ? 0 : lowest;
 }
 
 //+------------------------------------------------------------------+
@@ -383,17 +381,18 @@ double GetLowestSellStop()
       }
    }
    
-   return lowest;
+   return (lowest == DBL_MAX) ? 0 : lowest;
 }
 
 //+------------------------------------------------------------------+
-//| ตรวจสอบว่ามีราคาซ้ำกันหรือไม่                                    |
+//| หาราคา Buy ล่างสุด (รวม Pending + Active Position)              |
 //+------------------------------------------------------------------+
-bool IsPriceOccupied(double checkPrice, ENUM_ORDER_TYPE orderType)
+double GetLowestBuyPrice()
 {
-   int total = OrdersTotal();
-   double tolerance = GridStep * PointValue * 0.5; // ครึ่งหนึ่งของ GridStep
+   double lowest = DBL_MAX;
    
+   // ตรวจสอบ Pending Orders
+   int total = OrdersTotal();
    for(int i = 0; i < total; i++)
    {
       ulong ticket = OrderGetTicket(i);
@@ -401,7 +400,99 @@ bool IsPriceOccupied(double checkPrice, ENUM_ORDER_TYPE orderType)
       {
          if(OrderGetString(ORDER_SYMBOL) == _Symbol &&
             OrderGetInteger(ORDER_MAGIC) == MagicNumber &&
-            OrderGetInteger(ORDER_TYPE) == orderType)
+            OrderGetInteger(ORDER_TYPE) == ORDER_TYPE_BUY_STOP)
+         {
+            double price = OrderGetDouble(ORDER_PRICE_OPEN);
+            if(price < lowest)
+               lowest = price;
+         }
+      }
+   }
+   
+   // ตรวจสอบ Active Positions (Buy)
+   int posTotal = PositionsTotal();
+   for(int i = 0; i < posTotal; i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket > 0)
+      {
+         if(PositionGetString(POSITION_SYMBOL) == _Symbol &&
+            PositionGetInteger(POSITION_MAGIC) == MagicNumber &&
+            PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY)
+         {
+            double price = PositionGetDouble(POSITION_PRICE_OPEN);
+            if(price < lowest)
+               lowest = price;
+         }
+      }
+   }
+   
+   return (lowest == DBL_MAX) ? 0 : lowest;
+}
+
+//+------------------------------------------------------------------+
+//| หาราคา Sell บนสุด (รวม Pending + Active Position)               |
+//+------------------------------------------------------------------+
+double GetHighestSellPrice()
+{
+   double highest = 0;
+   
+   // ตรวจสอบ Pending Orders
+   int total = OrdersTotal();
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket > 0)
+      {
+         if(OrderGetString(ORDER_SYMBOL) == _Symbol &&
+            OrderGetInteger(ORDER_MAGIC) == MagicNumber &&
+            OrderGetInteger(ORDER_TYPE) == ORDER_TYPE_SELL_STOP)
+         {
+            double price = OrderGetDouble(ORDER_PRICE_OPEN);
+            if(price > highest)
+               highest = price;
+         }
+      }
+   }
+   
+   // ตรวจสอบ Active Positions (Sell)
+   int posTotal = PositionsTotal();
+   for(int i = 0; i < posTotal; i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket > 0)
+      {
+         if(PositionGetString(POSITION_SYMBOL) == _Symbol &&
+            PositionGetInteger(POSITION_MAGIC) == MagicNumber &&
+            PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL)
+         {
+            double price = PositionGetDouble(POSITION_PRICE_OPEN);
+            if(price > highest)
+               highest = price;
+         }
+      }
+   }
+   
+   return highest;
+}
+
+//+------------------------------------------------------------------+
+//| ตรวจสอบว่ามีราคาซ้ำกันสำหรับ Buy หรือไม่                         |
+//+------------------------------------------------------------------+
+bool IsPriceOccupiedBuy(double checkPrice)
+{
+   double tolerance = GridStep * PointValue * 0.3;
+   
+   // ตรวจสอบ Pending Buy Stop Orders
+   int total = OrdersTotal();
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket > 0)
+      {
+         if(OrderGetString(ORDER_SYMBOL) == _Symbol &&
+            OrderGetInteger(ORDER_MAGIC) == MagicNumber &&
+            OrderGetInteger(ORDER_TYPE) == ORDER_TYPE_BUY_STOP)
          {
             double price = OrderGetDouble(ORDER_PRICE_OPEN);
             if(MathAbs(price - checkPrice) < tolerance)
@@ -410,7 +501,7 @@ bool IsPriceOccupied(double checkPrice, ENUM_ORDER_TYPE orderType)
       }
    }
    
-   // ตรวจสอบ Position ที่เปิดอยู่
+   // ตรวจสอบ Active Buy Positions
    int posTotal = PositionsTotal();
    for(int i = 0; i < posTotal; i++)
    {
@@ -418,7 +509,54 @@ bool IsPriceOccupied(double checkPrice, ENUM_ORDER_TYPE orderType)
       if(ticket > 0)
       {
          if(PositionGetString(POSITION_SYMBOL) == _Symbol &&
-            PositionGetInteger(POSITION_MAGIC) == MagicNumber)
+            PositionGetInteger(POSITION_MAGIC) == MagicNumber &&
+            PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY)
+         {
+            double price = PositionGetDouble(POSITION_PRICE_OPEN);
+            if(MathAbs(price - checkPrice) < tolerance)
+               return true;
+         }
+      }
+   }
+   
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| ตรวจสอบว่ามีราคาซ้ำกันสำหรับ Sell หรือไม่                        |
+//+------------------------------------------------------------------+
+bool IsPriceOccupiedSell(double checkPrice)
+{
+   double tolerance = GridStep * PointValue * 0.3;
+   
+   // ตรวจสอบ Pending Sell Stop Orders
+   int total = OrdersTotal();
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket > 0)
+      {
+         if(OrderGetString(ORDER_SYMBOL) == _Symbol &&
+            OrderGetInteger(ORDER_MAGIC) == MagicNumber &&
+            OrderGetInteger(ORDER_TYPE) == ORDER_TYPE_SELL_STOP)
+         {
+            double price = OrderGetDouble(ORDER_PRICE_OPEN);
+            if(MathAbs(price - checkPrice) < tolerance)
+               return true;
+         }
+      }
+   }
+   
+   // ตรวจสอบ Active Sell Positions
+   int posTotal = PositionsTotal();
+   for(int i = 0; i < posTotal; i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket > 0)
+      {
+         if(PositionGetString(POSITION_SYMBOL) == _Symbol &&
+            PositionGetInteger(POSITION_MAGIC) == MagicNumber &&
+            PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL)
          {
             double price = PositionGetDouble(POSITION_PRICE_OPEN);
             if(MathAbs(price - checkPrice) < tolerance)
@@ -433,7 +571,7 @@ bool IsPriceOccupied(double checkPrice, ENUM_ORDER_TYPE orderType)
 //+------------------------------------------------------------------+
 //| ลบ Buy Stop บนสุด                                               |
 //+------------------------------------------------------------------+
-void DeleteHighestBuyStop()
+bool DeleteHighestBuyStop()
 {
    ulong highestTicket = 0;
    double highestPrice = 0;
@@ -466,19 +604,20 @@ void DeleteHighestBuyStop()
       request.action = TRADE_ACTION_REMOVE;
       request.order = highestTicket;
       
-      bool ok = OrderSend(request, result);
-      //if(!ok)
-      //{
-         //PrintFormat("OrderSend failed ret=%d comment=%s", res.retcode, res.comment);
-         //PrintFormat("OrderSend failed ret=%d", res.retcode);
-      //}
+      if(OrderSend(request, result))
+      {
+         Print("ลบ Buy Stop บนสุดสำเร็จที่ ", highestPrice);
+         return true;
+      }
    }
+   
+   return false;
 }
 
 //+------------------------------------------------------------------+
 //| ลบ Sell Stop ล่างสุด                                            |
 //+------------------------------------------------------------------+
-void DeleteLowestSellStop()
+bool DeleteLowestSellStop()
 {
    ulong lowestTicket = 0;
    double lowestPrice = DBL_MAX;
@@ -511,7 +650,13 @@ void DeleteLowestSellStop()
       request.action = TRADE_ACTION_REMOVE;
       request.order = lowestTicket;
       
-      bool ok = OrderSend(request, result);
+      if(OrderSend(request, result))
+      {
+         Print("ลบ Sell Stop ล่างสุดสำเร็จที่ ", lowestPrice);
+         return true;
+      }
    }
+   
+   return false;
 }
 //+------------------------------------------------------------------+
