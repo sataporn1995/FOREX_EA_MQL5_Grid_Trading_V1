@@ -552,9 +552,9 @@ void OnTick()
    // 2) เงื่อนไขกำไรสะสมถึงเป้า (เป็น “จุดสุทธิรวม”)
    if (InpGridType == GRID_AVG_CLOSE) {
       double netPts = SumNetPoints();
-      double netProfit = SumNetProfit();
-      if((InpSumNetType == SUM_NET_POINTS && netPts >= InpProfitTargetPts) 
-      || (InpSumNetType == SUM_NET_AMOUNT && netPts >= InpProfitTargetAmount))
+      double netProfit = InpSumNetType == SUM_NET_POINTS ? SumNetPoints() : SumNetProfit();
+      double targetProfit = InpSumNetType == SUM_NET_POINTS ? InpProfitTargetPts : InpProfitTargetAmount;
+      if(netProfit >= targetProfit)
       {
          // ปิดทั้งชุด แล้วเปิดตามทิศที่ตั้งไว้ (เริ่มชุดใหม่)
          if(CloseAll()) StartFirstOrder();
