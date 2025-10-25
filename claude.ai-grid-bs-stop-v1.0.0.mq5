@@ -16,15 +16,26 @@ enum ENUM_TRADE_MODE
 
 input ENUM_TRADE_MODE TradeMode = MODE_BOTH;        // โหมดการเทรด
 input double InitialLot = 0.01;                     // Lot เริ่มต้น
-input int GridStep = 500;                           // ระยะห่างของ Grid (จุด)
-input int TakeProfit = 400;                         // Take Profit (จุด)
-input int MaxPendingOrders = 3;                     // จำนวน Pending Orders สูงสุดต่อฝั่ง
+input int GridStep = 5000;                           // ระยะห่างของ Grid (จุด)
+input int TakeProfit = 5000;                         // Take Profit (จุด)
+input int MaxPendingOrders = 5;                     // จำนวน Pending Orders สูงสุดต่อฝั่ง
 input double GridGap = 1.5;                         // ตัวคูณสำหรับปรับ Grid
-input int MagicNumber = 123456;                     // Magic Number
+input int MagicNumber = 20251025001;                     // Magic Number
 
 //--- Global Variables
 double PointValue;
-int Digits;
+int Digits_;
+
+//-------------------- Utils --------------------
+double NormalizeVolume(double vol){
+   double step  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+   double minv  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double maxv  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   if(step<=0) step=0.01;
+   double v = MathMax(minv, MathMin(maxv, MathFloor(vol/step+1e-9)*step));
+   return v;
+}
+double NormalizePrice(double price){ return NormalizeDouble(price,(int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS)); }
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -32,7 +43,7 @@ int Digits;
 int OnInit()
 {
    PointValue = _Point;
-   Digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   Digits_ = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
    
    Print("Grid Trading EA เริ่มทำงาน");
    Print("โหมด: ", TradeMode == MODE_BUY_ONLY ? "Buy Only" : 
@@ -192,8 +203,8 @@ bool PlaceBuyStop(double price)
    request.symbol = _Symbol;
    request.volume = InitialLot;
    request.type = ORDER_TYPE_BUY_STOP;
-   request.price = NormalizeDouble(price, Digits);
-   request.tp = NormalizeDouble(tp, Digits);
+   request.price = NormalizeDouble(price, Digits_);
+   request.tp = NormalizeDouble(tp, Digits_);
    request.sl = 0;
    request.magic = MagicNumber;
    request.comment = "Buy Grid";
@@ -224,8 +235,8 @@ bool PlaceSellStop(double price)
    request.symbol = _Symbol;
    request.volume = InitialLot;
    request.type = ORDER_TYPE_SELL_STOP;
-   request.price = NormalizeDouble(price, Digits);
-   request.tp = NormalizeDouble(tp, Digits);
+   request.price = NormalizeDouble(price, Digits_);
+   request.tp = NormalizeDouble(tp, Digits_);
    request.sl = 0;
    request.magic = MagicNumber;
    request.comment = "Sell Grid";
@@ -455,7 +466,12 @@ void DeleteHighestBuyStop()
       request.action = TRADE_ACTION_REMOVE;
       request.order = highestTicket;
       
-      OrderSend(request, result);
+      bool ok = OrderSend(request, result);
+      //if(!ok)
+      //{
+         //PrintFormat("OrderSend failed ret=%d comment=%s", res.retcode, res.comment);
+         //PrintFormat("OrderSend failed ret=%d", res.retcode);
+      //}
    }
 }
 
@@ -495,7 +511,7 @@ void DeleteLowestSellStop()
       request.action = TRADE_ACTION_REMOVE;
       request.order = lowestTicket;
       
-      OrderSend(request, result);
+      bool ok = OrderSend(request, result);
    }
 }
 //+------------------------------------------------------------------+
