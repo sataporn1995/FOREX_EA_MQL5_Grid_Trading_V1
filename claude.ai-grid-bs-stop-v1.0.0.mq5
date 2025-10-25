@@ -19,13 +19,15 @@ input double InitialLot = 0.01;                     // Lot เริ่มต้
 input int GridStep = 500;                           // ระยะห่างของ Grid (จุด)
 input int TakeProfit = 400;                         // Take Profit (จุด)
 input int MaxPendingOrders = 3;                     // จำนวน Pending Orders สูงสุดต่อฝั่ง
-input double GridGap = 1.5;                         // ตัวคูณสำหรับปรับ Grid (เก่า)
 input int GridAdjustDistance = 800;                 // ระยะห่างสำหรับปรับ Grid (จุด)
 input int MagicNumber = 123456;                     // Magic Number
 
 //--- Global Variables
 double PointValue;
 int Digits_;
+datetime LastBuyAdjustTime = 0;      // เวลาที่ปรับ Buy Grid ล่าสุด
+datetime LastSellAdjustTime = 0;     // เวลาที่ปรับ Sell Grid ล่าสุด
+int AdjustCooldown = 60;             // Cooldown 60 วินาที
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -84,7 +86,10 @@ void ManageBuyGrid()
    // เงื่อนไขใหม่: ตรวจสอบว่าราคาลงห่างจากออเดอร์ล่างสุดเกิน GridAdjustDistance หรือไม่
    double adjustDistance = GridAdjustDistance * PointValue;
    
-   if(lowestBuyPrice > 0 && currentPrice < lowestBuyPrice - adjustDistance)
+   // ตรวจสอบ Cooldown ป้องกันการปรับ Grid รัวๆ
+   if(lowestBuyPrice > 0 && 
+      currentPrice < lowestBuyPrice - adjustDistance &&
+      TimeCurrent() - LastBuyAdjustTime > AdjustCooldown)
    {
       // ลบ Pending Buy Stop บนสุด
       if(DeleteHighestBuyStop())
@@ -93,7 +98,11 @@ void ManageBuyGrid()
          double newPrice = lowestBuyPrice - (GridStep * PointValue);
          if(!IsPriceOccupiedBuy(newPrice))
          {
-            PlaceBuyStop(newPrice);
+            if(PlaceBuyStop(newPrice))
+            {
+               LastBuyAdjustTime = TimeCurrent(); // บันทึกเวลาที่ปรับ
+               Print("ปรับ Buy Grid สำเร็จ - Cooldown ", AdjustCooldown, " วินาที");
+            }
          }
       }
    }
@@ -132,7 +141,10 @@ void ManageSellGrid()
    // เงื่อนไขใหม่: ตรวจสอบว่าราคาขึ้นห่างจากออเดอร์บนสุดเกิน GridAdjustDistance หรือไม่
    double adjustDistance = GridAdjustDistance * PointValue;
    
-   if(highestSellPrice > 0 && currentPrice > highestSellPrice + adjustDistance)
+   // ตรวจสอบ Cooldown ป้องกันการปรับ Grid รัวๆ
+   if(highestSellPrice > 0 && 
+      currentPrice > highestSellPrice + adjustDistance &&
+      TimeCurrent() - LastSellAdjustTime > AdjustCooldown)
    {
       // ลบ Pending Sell Stop ล่างสุด
       if(DeleteLowestSellStop())
@@ -141,7 +153,11 @@ void ManageSellGrid()
          double newPrice = highestSellPrice + (GridStep * PointValue);
          if(!IsPriceOccupiedSell(newPrice))
          {
-            PlaceSellStop(newPrice);
+            if(PlaceSellStop(newPrice))
+            {
+               LastSellAdjustTime = TimeCurrent(); // บันทึกเวลาที่ปรับ
+               Print("ปรับ Sell Grid สำเร็จ - Cooldown ", AdjustCooldown, " วินาที");
+            }
          }
       }
    }
