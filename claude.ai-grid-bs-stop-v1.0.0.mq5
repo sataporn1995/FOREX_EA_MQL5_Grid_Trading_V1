@@ -80,22 +80,22 @@ void ManageBuyGrid()
       return;
    }
    
-   // หาราคา Buy ล่างสุด (รวมทั้ง Pending และ Active)
-   double lowestBuyPrice = GetLowestBuyPrice();
+   // หาราคา Pending Buy Stop ล่างสุด (เฉพาะ Pending Order เท่านั้น)
+   double lowestBuyStop = GetLowestBuyStop();
    
-   // เงื่อนไขใหม่: ตรวจสอบว่าราคาลงห่างจากออเดอร์ล่างสุดเกิน GridAdjustDistance หรือไม่
+   // เงื่อนไขใหม่: ตรวจสอบว่าราคาลงห่างจาก Pending Buy Stop ล่างสุดเกิน GridAdjustDistance หรือไม่
    double adjustDistance = GridAdjustDistance * PointValue;
    
    // ตรวจสอบ Cooldown ป้องกันการปรับ Grid รัวๆ
-   if(lowestBuyPrice > 0 && 
-      currentPrice < lowestBuyPrice - adjustDistance &&
+   if(lowestBuyStop > 0 && 
+      currentPrice < lowestBuyStop - adjustDistance &&
       TimeCurrent() - LastBuyAdjustTime > AdjustCooldown)
    {
       // ลบ Pending Buy Stop บนสุด
       if(DeleteHighestBuyStop())
       {
-         // เปิด Pending Buy Stop ใหม่ด้านล่าง ห่างจากล่างสุด GridStep
-         double newPrice = lowestBuyPrice - (GridStep * PointValue);
+         // เปิด Pending Buy Stop ใหม่ด้านล่าง ห่างจาก Pending Buy Stop ล่างสุด GridStep
+         double newPrice = lowestBuyStop - (GridStep * PointValue);
          if(!IsPriceOccupiedBuy(newPrice))
          {
             if(PlaceBuyStop(newPrice))
@@ -135,22 +135,22 @@ void ManageSellGrid()
       return;
    }
    
-   // หาราคา Sell บนสุด (รวมทั้ง Pending และ Active)
-   double highestSellPrice = GetHighestSellPrice();
+   // หาราคา Pending Sell Stop บนสุด (เฉพาะ Pending Order เท่านั้น)
+   double highestSellStop = GetHighestSellStop();
    
-   // เงื่อนไขใหม่: ตรวจสอบว่าราคาขึ้นห่างจากออเดอร์บนสุดเกิน GridAdjustDistance หรือไม่
+   // เงื่อนไขใหม่: ตรวจสอบว่าราคาขึ้นห่างจาก Pending Sell Stop บนสุดเกิน GridAdjustDistance หรือไม่
    double adjustDistance = GridAdjustDistance * PointValue;
    
    // ตรวจสอบ Cooldown ป้องกันการปรับ Grid รัวๆ
-   if(highestSellPrice > 0 && 
-      currentPrice > highestSellPrice + adjustDistance &&
+   if(highestSellStop > 0 && 
+      currentPrice > highestSellStop + adjustDistance &&
       TimeCurrent() - LastSellAdjustTime > AdjustCooldown)
    {
       // ลบ Pending Sell Stop ล่างสุด
       if(DeleteLowestSellStop())
       {
-         // เปิด Pending Sell Stop ใหม่ด้านบน ห่างจากบนสุด GridStep
-         double newPrice = highestSellPrice + (GridStep * PointValue);
+         // เปิด Pending Sell Stop ใหม่ด้านบน ห่างจาก Pending Sell Stop บนสุด GridStep
+         double newPrice = highestSellStop + (GridStep * PointValue);
          if(!IsPriceOccupiedSell(newPrice))
          {
             if(PlaceSellStop(newPrice))
