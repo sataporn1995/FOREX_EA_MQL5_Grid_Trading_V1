@@ -5,14 +5,14 @@
 #property strict
 
 input long   InpMagic                = 2025102901; // Magic number
-input bool   AutoOpenFirst           = false;    // ให้ EA เปิดออเดอร์แรกเองหรือไม่
-input bool   AutoOpenBothSides       = false;    // เปิดทั้ง Buy และ Sell พร้อมกัน (ถ้า AutoOpenFirst=true)
-input ENUM_ORDER_TYPE InpFirstSide   = ORDER_TYPE_BUY;  // ทิศของออเดอร์แรก (ถ้า AutoOpenBothSides=false)
-input double InpFirstLot             = 0.01;     // ล็อตออเดอร์แรก
+//input bool   AutoOpenFirst           = false;    // ให้ EA เปิดออเดอร์แรกเองหรือไม่
+//input bool   AutoOpenBothSides       = false;    // เปิดทั้ง Buy และ Sell พร้อมกัน (ถ้า AutoOpenFirst=true)
+//input ENUM_ORDER_TYPE InpFirstSide   = ORDER_TYPE_BUY;  // ทิศของออเดอร์แรก (ถ้า AutoOpenBothSides=false)
+//input double InpFirstLot             = 0.01;     // ล็อตออเดอร์แรก
 
-input int    TP_points               = 20000;      // TP ของออเดอร์แรก (จุด)
-input int    SL_points               = 150000;     // SL ของออเดอร์แรก (จุด)
-input int    AddStep_points          = 5000;      // ระยะเปิดออเดอร์เพิ่มเมื่อราคาวิ่งสวน (จุด)
+input int    TP_points               = 2000;      // TP ของออเดอร์แรก (จุด)
+input int    SL_points               = 15000;     // SL ของออเดอร์แรก (จุด)
+input int    AddStep_points          = 500;      // ระยะเปิดออเดอร์เพิ่มเมื่อราคาวิ่งสวน (จุด)
 input int    MaxAdds                 = 0;        // จำนวนออเดอร์เพิ่มสูงสุด (0=ไม่จำกัด)
 input double LotMultiplier           = 1.1;      // ตัวคูณล็อตเมื่อเปิดเพิ่ม
 input int    LotDecimals             = 2;        // ปัดตำแหน่งทศนิยมล็อต
@@ -23,11 +23,11 @@ input bool   IncludeForeignPositions = true;     // รวมออเดอร�
 input bool   SameTP_SL_asFirst       = true;     // ออเดอร์เพิ่มตั้ง TP/SL ที่ราคาเดียวกันกับออเดอร์แรก
 
 // Trailing Stop parameters (แยกตาม Position Type)
-input int    StartTrail_aboveAvg_points = 4000;   // เริ่ม Trailing เมื่อราคาหนีจากราคาเฉลี่ย
-input int    TrailOffset_points         = 2000;   // ระยะ SL ตามราคาปัจจุบัน
+input int    StartTrail_aboveAvg_points = 400;   // เริ่ม Trailing เมื่อราคาหนีจากราคาเฉลี่ย
+input int    TrailOffset_points         = 200;   // ระยะ SL ตามราคาปัจจุบัน
 input bool   TrailOnlyTighten           = true;  // ขยับ SL แค่เข้าหากำไร
 
-input int    MinReopenSpacing_points    = 5000;    // กันเปิดซ้ำซ้อนใกล้ราคาเดิม (จุด)
+input int    MinReopenSpacing_points    = 500;    // กันเปิดซ้ำซ้อนใกล้ราคาเดิม (จุด)
 
 // -------------------------------------------------------------------
 double pips(int pts){ return (double)pts * _Point; }
@@ -68,6 +68,7 @@ void OnTick()
   
   // 1) ถ้าไม่มีออเดอร์เลย → เปิดออเดอร์แรก
   if(buyCount == 0 && sellCount == 0){
+    /*
     if(AutoOpenFirst){
       if(AutoOpenBothSides){
         OpenFirst(ORDER_TYPE_BUY);
@@ -76,6 +77,7 @@ void OnTick()
         OpenFirst(InpFirstSide);
       }
     }
+    */
     return;
   }
 
@@ -407,6 +409,7 @@ double VWAP(ENUM_POSITION_TYPE side)
   return pxv/v;
 }
 
+/*
 bool OpenFirst(ENUM_ORDER_TYPE orderType)
 {
   double lot = NormalizeLot(InpFirstLot);
@@ -425,6 +428,7 @@ bool OpenFirst(ENUM_ORDER_TYPE orderType)
     return OpenMarket(ORDER_TYPE_SELL, lot, sl, tp);
   }
 }
+*/
 
 bool OpenMarket(ENUM_ORDER_TYPE type, double lot, double sl, double tp)
 {
