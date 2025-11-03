@@ -23,33 +23,33 @@ input int InpMaxOrders = 0; // จำกัดจำนวนออเดอร�
 // ความปลอดภัย: ป้องกันเปิดซ้ำระดับเดิม (เช็คช่วงกันชน 15% ของกริด)
 input double InpNoDupLevelRatio  = 0.0;      // 0.15*GridStep เป็นช่วงกันชน // 0 = ไม่ Block ช่วงราคา เข้าออเดอร์ได้เลย
 
-input string Input___Profit___ = "=== Profit ==="; 
+input group "=== Profit ==="; 
 input SumNetEnum InpSumNetType = SUM_NET_AMOUNT;
 input int InpProfitTargetPts = 3000; // กำไรสะสม (จุด) เพื่อปิดทั้งชุด หรือ TP ของออเดอร์
 input double InpProfitTargetAmount = 10.0; // กำไรสะสม (เงิน) เพื่อปิดทั้งชุด หรือ TP ของออเดอร์
 
-input string Input___Lot___Size___ = "=== Lot Size ===";
+input group "=== Lot Size ===";
 input double InpLots             = 0.01;      // Lot เริ่มต้น
 input double InpMartingale = 1.1; // ตัวคูณ Martingale
 input double InpMaxLots = 0.2; // กำหนดขนาด Lots สูงสุด
 
-input string Input___New___Bar___Filter___ = "=== NEW BAR FILTER ===";
+input group "=== NEW BAR FILTER ===";
 input bool InpEnableNewBar = false; // เปิด/ปิด การเปิดออร์เดอร์เมื่อเปิดแท่งเทียนใหม่
 input ENUM_TIMEFRAMES  InpNewBarTF = PERIOD_M1; // TF แท่งแท่งใหม่
 
-input string Input___Zone___Filter___ = "=== Zone FILTER ===";
+input group "=== Zone FILTER ===";
 input bool InpEnablePriceZone = false; // เปิด/ปิด กรอบราคาออกการเปิดออเดอร์
 input double InpUpperPrice = 0.0; // กรอบราคาสูงสุด 0=ไม่กำหนด
 input double InpLowerPrice = 0.0; // กรอบราคาต่ำสุด 0=ไม่กำหนด
 
-input string Input___RSI___Filter___ = "=== RSI FILTER ===";
+input group "=== RSI FILTER ===";
 input bool InpEnableRsiFilter = true; // เปิด/ปิด ตัวกรอง RSI Indicator
 input ENUM_TIMEFRAMES InpRsiTF = PERIOD_M1; // TF สำหรับ RSI Indicator
 input int InpRsiPeriod = 5; // RSI Period
 input double InpRsiOversold = 30.0; // RSI Oversold
 input double InpRsiOverbought = 70.0; // RSI Overbought
 
-input string Input___Stoch___Filter___ = "=== STOCH FILTER ===";
+input group "=== STOCH FILTER ===";
 input bool InpEnableStochFilter = false; // เปิด/ปิด ตัวกรอง Stoch Indicator
 input ENUM_TIMEFRAMES InpStochTF = PERIOD_M1; // TF สำหรับ Stoch Indicator
 input int InpStochK = 5; // Stock K
@@ -60,14 +60,14 @@ input ENUM_STO_PRICE InpStochPrice = STO_LOWHIGH; // calculation method (Low/Hig
 input double InpStochOversold = 30.0; // Stoch Oversold
 input double InpStochOverbought = 70.0; // Stoch Overbought
 
-input string Input___Trend___Filter___ = "=== TREND FILTER ===";
+input group "=== TREND FILTER ===";
 input bool InpEnableTrendFilter = false; // เปิด/ปิด ตัวกรองเทรนด์ด้วย EMA
 input TrendEnum InpTradeFollowTrend = UPTREND; // เทรดตามเทรนด์
 input ENUM_TIMEFRAMES  InpTrendTF = PERIOD_H1;   // TF สำหรับเทรนด์
 input int InpEmaFast = 50; // EMA เร็ว
 input int InpEmaSlow = 200; // EMA ช้า
 
-input string   Input___Other___ = "=== OTHER ===";
+input group "=== OTHER ===";
 input long InpMagic = 112233001; // Magic number
 input int InpSlippage = 20; // Slippage (points)
 input bool InpCommentPriceLvl = true; // เขียนระดับราคาใน comment
