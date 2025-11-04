@@ -10,7 +10,7 @@
 
 // Input Parameters
 input double   LotSize = 0.01;              // ขนาด Lot
-input int      MagicNumber = 123456;        // Magic Number
+input int      MagicNumber = 20251104;        // Magic Number
 input string   TradeComment = "EMA_PB";     // คอมเมนต์ Order
 
 // EMA Parameters
