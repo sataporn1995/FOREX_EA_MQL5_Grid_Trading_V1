@@ -11,12 +11,12 @@ CTrade Trade;
 
 //------------------------- Inputs ----------------------------------
 enum DirectionEnum { DIR_BUY=0, DIR_SELL=1 };
-enum GridTypeEnum { GRID_AVG_CLOSE=0, GRID_TP=1 };
+enum GridTypeEnum { GRID_CLOSE_ALL=0, GRID_TP=1 };
 enum TrendEnum { UPTREND=1, DOWNTREND=-1, SIDEWAY=0 };
 enum SumNetEnum { SUM_NET_POINTS=0, SUM_NET_AMOUNT=1 };
 
 input DirectionEnum InpDirection = DIR_BUY; // หน้าเทรด: Buy / Sell
-input GridTypeEnum InpGridType = GRID_AVG_CLOSE; // ประเภทการเทรด Grid
+input GridTypeEnum InpGridType = GRID_CLOSE_ALL; // ประเภทการเทรด Grid
 input int InpGridStepPoints = 10000; // ระยะห่างกริด (จุด)
 input int InpMaxOrders = 0; // จำกัดจำนวนออเดอร์ (0=ไม่จำกัด)
 
@@ -550,7 +550,7 @@ void OnTick()
    }
 
    // 2) เงื่อนไขกำไรสะสมถึงเป้า (เป็น “จุดสุทธิรวม”)
-   if (InpGridType == GRID_AVG_CLOSE) {
+   if (InpGridType == GRID_CLOSE_ALL) {
       double netPts = SumNetPoints();
       double netProfit = InpSumNetType == SUM_NET_POINTS ? SumNetPoints() : SumNetProfit();
       double targetProfit = InpSumNetType == SUM_NET_POINTS ? InpProfitTargetPts : InpProfitTargetAmount;
