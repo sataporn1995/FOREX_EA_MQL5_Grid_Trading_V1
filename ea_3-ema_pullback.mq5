@@ -11,7 +11,7 @@
 
 //--- Input Parameters
 input group "=== Trend Filter ==="
-input ENUM_TIMEFRAMES InpTrendTF = PERIOD_H1;
+input ENUM_TIMEFRAMES InpTrendTF = PERIOD_H1; // TF for Trend
 input int InpEmaTrend = 200;        // EMA Period (For Trend Filter)
 
 input group "=== EMA Settings ==="
