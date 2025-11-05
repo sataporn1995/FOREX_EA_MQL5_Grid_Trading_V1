@@ -43,6 +43,7 @@ enum ENUM_LOT_MODE
 };
 input ENUM_LOT_MODE InpLotMode = LOT_FIXED;  // Lot Calculation Mode
 input double InpFixedLot = 0.01;          // Fixed Lot Size
+input double InpRRRatio = 2.5;            // RR Ratio (TP)
 input double InpRiskPercent = 1.0;        // Risk Percent per Trade (%)
 input double InpFixedMoney = 10.0;        // Fixed Money Risk
 
@@ -346,7 +347,7 @@ void CheckBuySignal()
       double sl = emaPullbackStructure_Trade[1];
       double entryPrice = rates[1].close;
       double slDistance = entryPrice - sl;
-      double tp = entryPrice + (slDistance * 2.5);
+      double tp = entryPrice + (slDistance * InpRRRatio);
       
       double lotSize = CalculateLotSize(slDistance);
       
@@ -430,7 +431,7 @@ void CheckSellSignal()
       double sl = emaPullbackStructure_Trade[1];
       double entryPrice = rates[1].close;
       double slDistance = sl - entryPrice;
-      double tp = entryPrice - (slDistance * 2.5);
+      double tp = entryPrice - (slDistance * InpRRRatio);
       
       double lotSize = CalculateLotSize(slDistance);
       
