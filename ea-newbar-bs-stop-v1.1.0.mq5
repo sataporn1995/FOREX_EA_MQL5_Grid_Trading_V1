@@ -60,7 +60,7 @@ input string InpStartTime = "06:00";                             // Start Time (
 input string InpEndTime = "04:30";                               // End Time (HH:MM)
 
 input group "=== EA Settings ==="
-input int InpMagicNumber = 123456;                               // Magic Number
+input int InpMagicNumber = 2025110601;                               // Magic Number
 input string InpComment = "New Pending B/S Stop EA";             // Order Comment
 input int InpMaxSpread = 200;                                    // Max Spread (points)
 
@@ -128,6 +128,8 @@ void OnTick()
    // Manage active positions
    ManagePositions();
 }
+
+bool IsMySymbol(const string sym){ return (sym==_Symbol); }
 
 bool IsNewBar(ENUM_TIMEFRAMES tf)
 {
@@ -215,6 +217,25 @@ void CountPositionTypes(int &buyCount, int &sellCount)
    }
 }
 
+int CountPositionsByType(ENUM_POSITION_TYPE type)
+{
+  int total = PositionsTotal();
+  int count = 0;
+  for(int i=0; i<total; i++){
+    ulong ticket = PositionGetTicket(i);
+    if(ticket==0) continue;
+    if(!PositionSelectByTicket(ticket)) continue;
+    if(!IsMySymbol((string)PositionGetString(POSITION_SYMBOL))) continue;
+    
+    if(/*!IncludeForeignPositions && */(long)PositionGetInteger(POSITION_MAGIC)!=InpMagicNumber) 
+      continue;
+    
+    if((ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) == type) 
+      count++;
+  }
+  return count;
+}
+
 //+------------------------------------------------------------------+
 //| Place Pending Orders                                            |
 //+------------------------------------------------------------------+
@@ -226,8 +247,11 @@ void PlacePendingOrders()
    }
    
    // Count existing positions by type
-   int buyCount = 0, sellCount = 0;
-   CountPositionTypes(buyCount, sellCount);
+   //int buyCount = 0, sellCount = 0;
+   //CountPositionTypes(buyCount, sellCount);
+   
+   int buyCount = CountPositionsByType(POSITION_TYPE_BUY);
+   int sellCount = CountPositionsByType(POSITION_TYPE_SELL);
    
    double openPrice = iOpen(_Symbol, InpPeriod, 0);
    double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
