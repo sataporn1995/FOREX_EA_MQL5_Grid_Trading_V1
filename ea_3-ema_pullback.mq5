@@ -58,9 +58,9 @@ input string InpStartTime = "00:00";      // Start Trading Time (HH:MM)
 input string InpEndTime = "23:59";        // End Trading Time (HH:MM)
 
 input group "=== EA Settings ==="
-input int InpMagicNumber = 20251105;        // Magic Number
+input int InpMagicNumber = 20251106;        // Magic Number
 input string InpTradeComment = "EMA_PB";  // Trade Comment
-input int InpMaxSpread = 250;             // Max Spread (points)
+input int InpMaxSpread = 200;             // Max Spread (points)
 
 //--- Global Variables
 CTrade trade;
