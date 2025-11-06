@@ -47,9 +47,15 @@ input double InpRRRatio = 2.5;            // RR Ratio (TP)
 input double InpRiskPercent = 1.0;        // Risk Percent per Trade (%)
 input double InpFixedMoney = 10.0;        // Fixed Money Risk
 
+input group "=== SL with ATR ===";
+input bool   InpUseATR = true;           // Use ATR for SL
+input int    InpARTPeriod = 14;              // ATR Period
+input ENUM_TIMEFRAMES InpATRTF = PERIOD_M15; // TF for ATR
+input double InpATRMultiplier = 2.0;          // ATR Multiplier
+
 input group "=== Trading Time (Thai Time) ==="
-input string InpStartTime = "06:00";      // Start Trading Time (HH:MM)
-input string InpEndTime = "04:30";        // End Trading Time (HH:MM)
+input string InpStartTime = "00:00";      // Start Trading Time (HH:MM)
+input string InpEndTime = "23:59";        // End Trading Time (HH:MM)
 
 input group "=== EA Settings ==="
 input int InpMagicNumber = 20251105;        // Magic Number
@@ -60,8 +66,10 @@ input int InpMaxSpread = 250;             // Max Spread (points)
 CTrade trade;
 int handleEMASignal_Trade, handleEMAPullback_Trade, handleEMAPullbackStructure_Trade;
 int handleEMA_Trend;
+int handleATR;
 double emaSignal_Trade[], emaPullback_Trade[], emaPullbackStructure_Trade[];
 double emaFilter_Trend[];
+double atrValue[];          // ATR Value
 
 // State tracking variables
 enum ENUM_TRADE_STATE
@@ -95,14 +103,19 @@ int OnInit()
    trade.SetDeviationInPoints(10);
    trade.SetTypeFilling(ORDER_FILLING_FOK);
    
+   // ตั้งค่า Array เป็น Series (ล่าสุดอยู่ index 0)
+   ArraySetAsSeries(atrValue, true);
+   
    // Create indicator handles
    handleEMASignal_Trade = iMA(_Symbol, InpTradeTF, InpEmaSignal, 0, MODE_EMA, PRICE_CLOSE);
    handleEMAPullback_Trade = iMA(_Symbol, InpTradeTF, InpEmaPullback, 0, MODE_EMA, PRICE_CLOSE);
    handleEMAPullbackStructure_Trade = iMA(_Symbol, InpTradeTF, InpEmaPullbackStructure, 0, MODE_EMA, PRICE_CLOSE);
    handleEMA_Trend = iMA(_Symbol, InpTrendTF, InpEmaTrend, 0, MODE_EMA, PRICE_CLOSE);
+   handleATR = iATR(_Symbol, InpATRTF, InpARTPeriod);
    
    if(handleEMASignal_Trade == INVALID_HANDLE || handleEMAPullback_Trade == INVALID_HANDLE || 
-      handleEMAPullbackStructure_Trade == INVALID_HANDLE || handleEMA_Trend == INVALID_HANDLE)
+      handleEMAPullbackStructure_Trade == INVALID_HANDLE || handleEMA_Trend == INVALID_HANDLE
+      || handleATR == INVALID_HANDLE)
    {
       Print("Error creating indicator handles");
       return(INIT_FAILED);
@@ -133,10 +146,11 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    // Release indicator handles
-   IndicatorRelease(handleEMASignal_Trade);
-   IndicatorRelease(handleEMAPullback_Trade);
-   IndicatorRelease(handleEMAPullbackStructure_Trade);
-   IndicatorRelease(handleEMA_Trend);
+   if(handleEMASignal_Trade != INVALID_HANDLE) IndicatorRelease(handleEMASignal_Trade);
+   if(handleEMAPullback_Trade != INVALID_HANDLE) IndicatorRelease(handleEMAPullback_Trade);
+   if(handleEMAPullbackStructure_Trade != INVALID_HANDLE) IndicatorRelease(handleEMAPullbackStructure_Trade);
+   if(handleEMA_Trend != INVALID_HANDLE) IndicatorRelease(handleEMA_Trend);
+   if(handleATR != INVALID_HANDLE) IndicatorRelease(handleATR);
 }
 
 //+------------------------------------------------------------------+
@@ -187,6 +201,7 @@ bool UpdateIndicators()
    if(CopyBuffer(handleEMAPullback_Trade, 0, 0, 3, emaPullback_Trade) <= 0) return false;
    if(CopyBuffer(handleEMAPullbackStructure_Trade, 0, 0, 3, emaPullbackStructure_Trade) <= 0) return false;
    if(CopyBuffer(handleEMA_Trend, 0, 0, 2, emaFilter_Trend) <= 0) return false;
+   if(InpUseATR && CopyBuffer(handleATR, 0, 0, 2, atrValue) < 2) return false;
    
    return true;
 }
@@ -344,7 +359,10 @@ void CheckBuySignal()
          return;
       }
       
-      double sl = emaPullbackStructure_Trade[1];
+      double sl = 0;
+      if (InpUseATR && atrValue[0] > 0) sl = atrValue[0] * InpATRMultiplier;
+      else sl = emaPullbackStructure_Trade[1];
+      
       double entryPrice = rates[1].close;
       double slDistance = entryPrice - sl;
       double tp = entryPrice + (slDistance * InpRRRatio);
@@ -428,7 +446,10 @@ void CheckSellSignal()
          return;
       }
       
-      double sl = emaPullbackStructure_Trade[1];
+      double sl = 0;
+      if (InpUseATR && atrValue[0] > 0) sl = atrValue[0] * InpATRMultiplier;
+      else sl = emaPullbackStructure_Trade[1];
+      
       double entryPrice = rates[1].close;
       double slDistance = sl - entryPrice;
       double tp = entryPrice - (slDistance * InpRRRatio);
