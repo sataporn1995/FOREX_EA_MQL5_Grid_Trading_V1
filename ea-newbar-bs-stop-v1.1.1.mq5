@@ -60,7 +60,7 @@ input string InpStartTime = "00:00";                             // Start Time (
 input string InpEndTime = "23:59";                               // End Time (HH:MM)
 
 input group "=== EA Settings ==="
-input int InpMagicNumber = 2025110601;                           // Magic Number
+input int InpMagicNumber = 2025110701;                           // Magic Number
 input string InpComment = "New Pending B/S Stop EA";             // Order Comment
 input int InpMaxSpread = 200;                                    // Max Spread (points)
 
@@ -765,5 +765,93 @@ bool IsWithinTradingHours()
       return (currentMinutes >= startMinutes && currentMinutes <= endMinutes);
    }
 }
+
+//+------------------------------------------------------------------+
+//| ตรวจสอบว่าแท่งเป็นแท่งขาขึ้นหรือขาลง                                |
+//+------------------------------------------------------------------+
+bool IsBullishCandle(int shift)
+{
+   double open = iOpen(_Symbol, PERIOD_CURRENT, shift);
+   double close = iClose(_Symbol, PERIOD_CURRENT, shift);
+   
+   return (close > open);
+}
+
+/*
+//+------------------------------------------------------------------+
+//| ตรวจสอบว่าแท่ง 1 "ชนะ" แท่ง 2 หรือไม่                              |
+//| แท่งชนะ = แท่งขาขึ้นมีราคาปิดสูงกว่าแท่งก่อน หรือ                  |
+//|           แท่งขาลงมีราคาปิดต่ำกว่าแท่งก่อน                          |
+//+------------------------------------------------------------------+
+bool CandleWins(int candle1, int candle2)
+{
+   double close1 = iClose(_Symbol, PERIOD_CURRENT, candle1);
+   double close2 = iClose(_Symbol, PERIOD_CURRENT, candle2);
+   
+   bool candle1Bullish = IsBullishCandle(candle1);
+   bool candle2Bullish = IsBullishCandle(candle2);
+   
+   // ถ้าทั้งสองแท่งเป็นแนวโน้มเดียวกัน
+   if(candle1Bullish && candle2Bullish)
+   {
+      // แท่ง 1 ชนะถ้าปิดสูงกว่า
+      return (close1 > close2);
+   }
+   else if(!candle1Bullish && !candle2Bullish)
+   {
+      // แท่ง 1 ชนะถ้าปิดต่ำกว่า
+      return (close1 < close2);
+   }
+   else
+   {
+      // ถ้าต่างแนวโน้มกัน ถือว่าแท่ง 1 ชนะ (เปลี่ยนทิศทาง)
+      return true;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| วิเคราะห์และทำการเทรด                                              |
+//+------------------------------------------------------------------+
+void AnalyzeAndTrade()
+{
+   // แท่งที่ 1 = แท่งที่ปิดไปแล้ว (shift 1)
+   // แท่งที่ 2 = แท่งก่อนหน้าแท่งที่ 1 (shift 2)
+   
+   bool candle1WinsCandle2 = CandleWins(1, 2);
+   
+   if(!candle1WinsCandle2)
+   {
+      // กรณีที่ 1: แท่งที่ 1 ไม่ชนะแท่งที่ 2
+      // เปิดออเดอร์ตามแนวโน้มของแท่งที่ 2 (เพราะแท่งที่ 2 แข็งแกร่งกว่า)
+      
+      if(IsBullishCandle(2))
+      {
+         Print("เงื่อนไข 1: แท่ง 1 ไม่ชนะ แท่ง 2 -> เปิด BUY (ตามแท่ง 2)");
+         OpenBuy();
+      }
+      else
+      {
+         Print("เงื่อนไข 1: แท่ง 1 ไม่ชนะ แท่ง 2 -> เปิด SELL (ตามแท่ง 2)");
+         OpenSell();
+      }
+   }
+   else
+   {
+      // กรณีที่ 2: แท่งที่ 1 ชนะแท่งที่ 2
+      // เปิดออเดอร์ตามแนวโน้มของแท่งที่ 1
+      
+      if(IsBullishCandle(1))
+      {
+         Print("เงื่อนไข 2: แท่ง 1 ชนะ แท่ง 2 -> เปิด BUY (ตามแท่ง 1)");
+         OpenBuy();
+      }
+      else
+      {
+         Print("เงื่อนไข 2: แท่ง 1 ชนะ แท่ง 2 -> เปิด SELL (ตามแท่ง 1)");
+         OpenSell();
+      }
+   }
+}
+*/
 
 //+------------------------------------------------------------------+
