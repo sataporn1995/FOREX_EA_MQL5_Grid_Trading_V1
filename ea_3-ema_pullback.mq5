@@ -50,7 +50,7 @@ input double InpFixedMoney = 10.0;        // Fixed Money Risk
 input group "=== SL with ATR ===";
 input bool   InpUseATR = true;           // Use ATR for SL
 input int    InpARTPeriod = 14;              // ATR Period
-input ENUM_TIMEFRAMES InpATRTF = PERIOD_M15; // TF for ATR
+input ENUM_TIMEFRAMES InpATRTF = PERIOD_M5; // TF for ATR
 input double InpATRMultiplier = 2.0;          // ATR Multiplier
 
 input group "=== Trading Time (Thai Time) ==="
@@ -359,9 +359,8 @@ void CheckBuySignal()
          return;
       }
       
-      double sl = 0;
-      if (InpUseATR && atrValue[0] > 0) sl = atrValue[0] * InpATRMultiplier;
-      else sl = emaPullbackStructure_Trade[1];
+      double atr = InpUseATR && atrValue[0] > 0 ? atrValue[0] * InpATRMultiplier: 0;
+      double sl = emaPullbackStructure_Trade[1] - atr;
       
       double entryPrice = rates[1].close;
       double slDistance = entryPrice - sl;
@@ -446,9 +445,8 @@ void CheckSellSignal()
          return;
       }
       
-      double sl = 0;
-      if (InpUseATR && atrValue[0] > 0) sl = atrValue[0] * InpATRMultiplier;
-      else sl = emaPullbackStructure_Trade[1];
+      double atr = InpUseATR && atrValue[0] > 0 ? atrValue[0] * InpATRMultiplier: 0;
+      double sl = emaPullbackStructure_Trade[1] + atr;
       
       double entryPrice = rates[1].close;
       double slDistance = sl - entryPrice;
