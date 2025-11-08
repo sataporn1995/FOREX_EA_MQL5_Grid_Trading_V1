@@ -60,10 +60,10 @@ input int    InpARTPeriod = 14;              // ATR Period
 input ENUM_TIMEFRAMES InpATRTF = PERIOD_M5; // TF for ATR
 input double InpATRMultiplier = 2.0;          // ATR Multiplier
 enum ENUM_SL_TYPES {
-   SL_EMA_3, // EMA (3)
+   SL_EMA_PB, // EMA (3)
    SL_POINTS // SL Points
 };
-input ENUM_SL_TYPES InpSLType = SL_EMA_3; // SL Type
+input ENUM_SL_TYPES InpSLType = SL_POINTS; // SL Type
 input int InpSLPoints = 5000; // SL Points
 
 input group "=== Trading Time (Thai Time) ==="
@@ -411,7 +411,12 @@ void CheckSellSignal()
 void OpenBuyOrder()
 {
    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-   double sl = bufferEMAPB[1]; // SL at EMA100 of entry bar
+   double atr = InpUseATR && bufferATRValue[0] > 0 ? bufferATRValue[0] * InpATRMultiplier: 0;
+   double sl = 0;
+   
+   if (InpSLType == SL_EMA_PB) sl = bufferEMAPB[1] - atr; // SL at EMA PB of entry bar
+   else sl = ask - InpSLPoints * _Point - atr;
+   
    double slDistance = ask - sl;
    double tp = ask + (slDistance * InpTPMultiplier);
    
@@ -473,7 +478,12 @@ void OpenBuyOrder()
 void OpenSellOrder()
 {
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   double sl = bufferEMAPB[1]; // SL at EMA100 of entry bar
+   double sl = 0;
+   double atr = InpUseATR && bufferATRValue[0] > 0 ? bufferATRValue[0] * InpATRMultiplier: 0;
+   
+   if (InpSLType == SL_EMA_PB) sl = bufferEMAPB[1] + atr; // SL at EMA PB of entry bar
+   else sl = bid + InpSLPoints * _Point + atr;
+   
    double slDistance = sl - bid;
    double tp = bid - (slDistance * InpTPMultiplier);
    
