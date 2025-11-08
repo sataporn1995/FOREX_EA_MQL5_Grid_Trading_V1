@@ -47,11 +47,17 @@ input double InpRRRatio = 2.5;            // RR Ratio (TP)
 input double InpRiskPercent = 1.0;        // Risk Percent per Trade (%)
 input double InpFixedMoney = 10.0;        // Fixed Money Risk
 
-input group "=== SL with ATR ===";
+input group "=== MM ===";
 input bool   InpUseATR = true;           // Use ATR for SL
 input int    InpARTPeriod = 14;              // ATR Period
 input ENUM_TIMEFRAMES InpATRTF = PERIOD_M5; // TF for ATR
 input double InpATRMultiplier = 2.0;          // ATR Multiplier
+enum ENUM_SL_TYPES {
+   SL_EMA_3, // EMA (3)
+   SL_POINTS // SL Points
+};
+input ENUM_SL_TYPES InpSLType = SL_EMA_3; // SL Type
+input int InpSLPoints = 5000; // SL Points
 
 input group "=== Trading Time (Thai Time) ==="
 input string InpStartTime = "00:00";      // Start Trading Time (HH:MM)
@@ -359,10 +365,13 @@ void CheckBuySignal()
          return;
       }
       
-      double atr = InpUseATR && atrValue[0] > 0 ? atrValue[0] * InpATRMultiplier: 0;
-      double sl = emaPullbackStructure_Trade[1] - atr;
-      
       double entryPrice = rates[1].close;
+      double atr = InpUseATR && atrValue[0] > 0 ? atrValue[0] * InpATRMultiplier: 0;
+      double sl = 0;
+      if (InpSLType == SL_EMA_3) sl = emaPullbackStructure_Trade[1] - atr;
+      else sl = entryPrice - InpSLPoints * _Point - atr;
+      
+      
       double slDistance = entryPrice - sl;
       double tp = entryPrice + (slDistance * InpRRRatio);
       
@@ -445,10 +454,12 @@ void CheckSellSignal()
          return;
       }
       
-      double atr = InpUseATR && atrValue[0] > 0 ? atrValue[0] * InpATRMultiplier: 0;
-      double sl = emaPullbackStructure_Trade[1] + atr;
-      
       double entryPrice = rates[1].close;
+      double atr = InpUseATR && atrValue[0] > 0 ? atrValue[0] * InpATRMultiplier: 0;
+      double sl = 0;
+      if (InpSLType == SL_EMA_3) sl = emaPullbackStructure_Trade[1] + atr;
+      else sl = entryPrice + InpSLPoints * _Point + atr;
+      
       double slDistance = sl - entryPrice;
       double tp = entryPrice - (slDistance * InpRRRatio);
       
