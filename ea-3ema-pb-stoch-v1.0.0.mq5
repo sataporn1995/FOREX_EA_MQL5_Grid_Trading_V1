@@ -17,6 +17,7 @@ input double InpStochOversold = 30.0;        // Oversold Level
 input double InpStochOverbought = 70.0;      // Overbought Level
 
 input group "=== EMA Settings ==="
+input ENUM_TIMEFRAMES InpTradeTF = PERIOD_M5; // TF for Trade 
 input int InpEMASignal = 50;                // EMA Signal
 input int InpEMAPB = 100;                   // EMA Pullback
 input int InpEMAPB_Structure = 200;         // EMA Pullback Structure
@@ -67,16 +68,16 @@ input ENUM_SL_TYPES InpSLType = SL_POINTS; // SL Type
 input int InpSLPoints = 5000; // SL Points
 
 input group "=== Trading Time (Thai Time) ==="
-input string InpStartTime = "06:00";         // Trading Start Time (HH:MM)
-input string InpEndTime = "04:30";           // Trading End Time (HH:MM)
+input string InpStartTime = "00:00";         // Trading Start Time (HH:MM)
+input string InpEndTime = "23:59";           // Trading End Time (HH:MM)
 input int InpThaiTimeOffset = 0;             // Thai Time Offset from Broker (Hours)
 
 input group "=== Spread Filter ==="
 input int InpMaxSpreadPoints = 150;          // Max Spread (Points)
 
 input group "=== General Settings ==="
-input int InpMagicNumber = 123456;           // Magic Number
-input string InpTradeComment = "EMA_Pullback"; // Trade Comment
+input int InpMagicNumber = 2025110801;           // Magic Number
+input string InpTradeComment = "EMA_Pullback_STO"; // Trade Comment
 
 //--- Global Variables
 int handleStoch;
@@ -109,10 +110,10 @@ int beArraySize = 0;
 int OnInit()
 {
    //--- Create indicators
-   handleStoch = iStochastic(_Symbol, PERIOD_M5, InpStochK, InpStochD, InpStochSlowing, MODE_SMA, STO_LOWHIGH);
-   handleEMASignal = iMA(_Symbol, PERIOD_M5, InpEMASignal, 0, MODE_EMA, PRICE_CLOSE);
-   handleEMAPB = iMA(_Symbol, PERIOD_M5, InpEMAPB, 0, MODE_EMA, PRICE_CLOSE);
-   handleEMAPB_Structure = iMA(_Symbol, PERIOD_M5, InpEMAPB_Structure, 0, MODE_EMA, PRICE_CLOSE);
+   handleStoch = iStochastic(_Symbol, InpTradeTF, InpStochK, InpStochD, InpStochSlowing, MODE_SMA, STO_LOWHIGH);
+   handleEMASignal = iMA(_Symbol, InpTradeTF, InpEMASignal, 0, MODE_EMA, PRICE_CLOSE);
+   handleEMAPB = iMA(_Symbol, InpTradeTF, InpEMAPB, 0, MODE_EMA, PRICE_CLOSE);
+   handleEMAPB_Structure = iMA(_Symbol, InpTradeTF, InpEMAPB_Structure, 0, MODE_EMA, PRICE_CLOSE);
    
    if(handleStoch == INVALID_HANDLE || handleEMASignal == INVALID_HANDLE || 
       handleEMAPB == INVALID_HANDLE || handleEMAPB_Structure == INVALID_HANDLE)
@@ -155,7 +156,7 @@ void OnTick()
 {
    //--- Check if new bar
    static datetime lastBarTime = 0;
-   datetime currentBarTime = iTime(_Symbol, PERIOD_M5, 0);
+   datetime currentBarTime = iTime(_Symbol, InpTradeTF, 0);
    
    if(currentBarTime == lastBarTime)
    {
@@ -282,8 +283,8 @@ bool IsEMAAlignedForSell()
 //+------------------------------------------------------------------+
 void CheckBuySignal()
 {
-   double close1 = iClose(_Symbol, PERIOD_M5, 1);
-   double close2 = iClose(_Symbol, PERIOD_M5, 2);
+   double close1 = iClose(_Symbol, InpTradeTF, 1);
+   double close2 = iClose(_Symbol, InpTradeTF, 2);
    
    //--- 1. Check Stochastic crossing above Oversold
    if(bufferStochMain[2] <= InpStochOversold && bufferStochMain[1] > InpStochOversold)
@@ -315,7 +316,7 @@ void CheckBuySignal()
    bool deepPullbackValid = false;
    for(int i = 2; i < 10; i++) // Check last 10 bars
    {
-      double closeBar = iClose(_Symbol, PERIOD_M5, i);
+      double closeBar = iClose(_Symbol, InpTradeTF, i);
       if(closeBar < bufferEMASignal[i] || closeBar < bufferEMAPB[i])
       {
          if(closeBar >= bufferEMAPB[i]) // Must not close below EMA100
@@ -346,8 +347,8 @@ void CheckBuySignal()
 //+------------------------------------------------------------------+
 void CheckSellSignal()
 {
-   double close1 = iClose(_Symbol, PERIOD_M5, 1);
-   double close2 = iClose(_Symbol, PERIOD_M5, 2);
+   double close1 = iClose(_Symbol, InpTradeTF, 1);
+   double close2 = iClose(_Symbol, InpTradeTF, 2);
    
    //--- 1. Check Stochastic crossing below Overbought
    if(bufferStochMain[2] >= InpStochOverbought && bufferStochMain[1] < InpStochOverbought)
@@ -379,7 +380,7 @@ void CheckSellSignal()
    bool deepPullbackValid = false;
    for(int i = 2; i < 10; i++) // Check last 10 bars
    {
-      double closeBar = iClose(_Symbol, PERIOD_M5, i);
+      double closeBar = iClose(_Symbol, InpTradeTF, i);
       if(closeBar > bufferEMASignal[i] || closeBar > bufferEMAPB[i])
       {
          if(closeBar <= bufferEMAPB[i]) // Must not close above EMA100
