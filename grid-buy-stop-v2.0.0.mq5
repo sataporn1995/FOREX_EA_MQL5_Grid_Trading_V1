@@ -45,7 +45,7 @@ input double InpLowerPrice = 0.0; // Lower Price (0 = No Limit)
 
 input group "=== OTHER ===";
 input int      InpMagicNumber = 2025111101;        // Magic Number
-input int      InpSlippage = 20; // Slippage (points)
+input int      InpSlippage = 10; // Slippage (points)
 input string   InpTradeComment = "Grid_BuyStop"; // Comment
 
 struct ProfitInfo{
@@ -114,10 +114,10 @@ void OnTick()
          return;
       }
       
-      if(InpGridType == GRID_TSL)
+      if(CheckNetProfit() && InpGridType == GRID_TSL)
       {
          MaybeTrailAll(POSITION_TYPE_BUY);
-         DeleteAllBuyStopOrders();
+         //DeleteAllBuyStopOrders();
          return;
       }
    }
