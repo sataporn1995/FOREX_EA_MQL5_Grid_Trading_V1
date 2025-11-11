@@ -332,7 +332,7 @@ bool PlaceBuyStop(double price)
    request.type = ORDER_TYPE_BUY_STOP;
    request.price = price;
    request.sl = 0;
-   request.tp = 0;
+   request.tp = tp_price;
    request.deviation = InpSlippage;
    request.magic = InpMagicNumber;
    request.comment = InpTradeComment;
