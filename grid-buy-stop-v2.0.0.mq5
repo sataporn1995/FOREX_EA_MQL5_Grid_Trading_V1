@@ -174,11 +174,21 @@ void OnTick()
       }
       
       // ถ้ามี Buy Stop อยู่แล้ว ตรวจสอบว่าไม่เหนือ lowest position
-      if(buy_stop_orders > 0 || ask <= threshold_price)
+      if(buy_stop_orders > 0)
       {
          double current_buy_stop_price = GetBuyStopPrice();
          double new_buy_stop_price = NormalizeDouble(ask + InpOrderDistance * g_point_value, g_digits);
-         if(current_buy_stop_price >= lowest_buy_price || current_buy_stop_price >= ask + (grid_step_result + InpFollowDistance) * g_point_value)
+         //if(current_buy_stop_price >= lowest_buy_price || current_buy_stop_price >= ask + (grid_step_result + InpFollowDistance) * g_point_value)
+         /*if(current_buy_stop_price >= lowest_buy_price || current_buy_stop_price >= ask + (grid_step_result + InpFollowDistance) * g_point_value)
+         {
+            DeleteAllBuyStopOrders();
+            PlaceBuyStop(new_buy_stop_price);
+         }*/
+         if(current_buy_stop_price >= lowest_buy_price)
+         {
+            DeleteAllBuyStopOrders();
+         }
+         if(ask <= threshold_price && current_buy_stop_price > ask + InpFollowDistance * g_point_value)
          {
             DeleteAllBuyStopOrders();
             PlaceBuyStop(new_buy_stop_price);
