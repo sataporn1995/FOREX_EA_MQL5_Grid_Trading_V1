@@ -152,11 +152,12 @@ void OnTick()
       return;
    }
    
-   int grid_step_result = (int)(InpGridStep * pow(InpGridStepMultiplier, CountPositions(POSITION_TYPE_BUY)));
+   
    
    //--- Condition 3 & 4: Has Buy Position - Manage Buy Stop
    if(buy_positions > 0)
    {
+      int grid_step_result = (int)(InpGridStep * pow(InpGridStepMultiplier, CountPositions(POSITION_TYPE_BUY) - 1));
       double threshold_price = lowest_buy_price - (grid_step_result + InpFollowDistance) * g_point_value;
       
       // ถ้าไม่มี Buy Stop และราคา Ask ต่ำกว่า threshold
