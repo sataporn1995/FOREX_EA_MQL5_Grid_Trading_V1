@@ -7,11 +7,19 @@
 #property strict
 
 //--- Input Parameters
-input double   InpLotSize = 0.01;              // ขนาด Lot
+input group "=== GRID SETTINGS ===";
 input int      InpGridStep = 5000;             // Grid Step (จุด)
+input double   InpGridStepMultiplier = 1.1;    // Grid Step Multiplier
 input int      InpFollowDistance = 1500;       // Follow Distance (จุด)
 input int      InpOrderDistance = 1000;        // Order Distance (จุด)
 input int      InpNetProfitPoints = 3000;      // Net Profit Points (จุด)
+
+input group "=== LOT SIZE ===";
+input double InpLotSize             = 0.01; // Start Lot
+input double InpMartingale = 1.1; // Martingale Multiplier
+input double InpMaxLots = 0.05; // Maximum Lot
+
+input group "=== OTHER ===";
 input int      InpMagicNumber = 888888;        // Magic Number
 input string   InpTradeComment = "Grid_BuyStop"; // Comment
 
@@ -106,16 +114,18 @@ void OnTick()
       return;
    }
    
+   int grid_step_result = (int)(InpGridStep * pow(InpGridStepMultiplier, CountPositions(POSITION_TYPE_BUY)));
+   
    //--- Condition 3 & 4: Has Buy Position - Manage Buy Stop
    if(buy_positions > 0)
    {
-      double threshold_price = lowest_buy_price - (InpGridStep + InpFollowDistance) * g_point_value;
+      double threshold_price = lowest_buy_price - (grid_step_result + InpFollowDistance) * g_point_value;
       
       // ถ้าไม่มี Buy Stop และราคา Ask ต่ำกว่า threshold
       if(buy_stop_orders == 0 && ask < threshold_price)
       {
          // ตั้ง Buy Stop ที่ต่ำกว่า lowest position ตาม Grid Step
-         double new_buy_stop_price = NormalizeDouble(lowest_buy_price - InpGridStep * g_point_value, g_digits);
+         double new_buy_stop_price = NormalizeDouble(lowest_buy_price - grid_step_result * g_point_value, g_digits);
          
          // ตรวจสอบว่าไม่เหนือ lowest position
          if(new_buy_stop_price < lowest_buy_price)
@@ -129,7 +139,7 @@ void OnTick()
       {
          double current_buy_stop_price = GetBuyStopPrice();
          double new_buy_stop_price = NormalizeDouble(ask + InpOrderDistance * g_point_value, g_digits);
-         if(current_buy_stop_price >= lowest_buy_price || current_buy_stop_price >= ask + (InpGridStep + InpFollowDistance) * g_point_value)
+         if(current_buy_stop_price >= lowest_buy_price || current_buy_stop_price >= ask + (grid_step_result + InpFollowDistance) * g_point_value)
          {
             DeleteAllBuyStopOrders();
             PlaceBuyStop(new_buy_stop_price);
@@ -237,9 +247,12 @@ bool PlaceBuyStop(double price)
    MqlTradeRequest request = {};
    MqlTradeResult result = {};
    
+   double nextLots = NormalizeDouble(InpLotSize * pow(InpMartingale, CountPositions(POSITION_TYPE_BUY)), 2);
+   if (nextLots > InpMaxLots) nextLots = InpMaxLots;
+   
    request.action = TRADE_ACTION_PENDING;
    request.symbol = _Symbol;
-   request.volume = InpLotSize;
+   request.volume = nextLots;
    request.type = ORDER_TYPE_BUY_STOP;
    request.price = price;
    request.sl = 0;
