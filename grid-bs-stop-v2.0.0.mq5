@@ -83,7 +83,7 @@ input group "=== SELL FILTER ===";
 input bool InpSellEnableTrend = false; // [Sell] Enable/Disable Trend Filter by 2 EMA
 input bool InpSellEnableStoch = false; // [Sell] Enable/Disable Stoch Filter
 
-input group "++++++++++ INDICATOR FILTER ++++++++++";
+//input group "++++++++++ INDICATOR FILTER ++++++++++";
 input group "=== TREND ===";
 input ENUM_TIMEFRAMES  InpTrendTF = PERIOD_H1; // [Buy] TF for Trend Filter
 input int InpEmaFast = 50; // [Buy] EMA Fast
@@ -143,7 +143,7 @@ int OnInit()
    handle_ema_fast = iMA(_Symbol, InpTrendTF, InpEmaFast, 0, MODE_EMA, PRICE_CLOSE);
    handle_ema_slow = iMA(_Symbol, InpTrendTF, InpEmaSlow, 0, MODE_EMA, PRICE_CLOSE);
    
-   if(handle_stoch == INVALID_HANDLE || handle_ema_fast == INVALID_HANDLE || handle_ema_slow)
+   if(handle_stoch == INVALID_HANDLE || handle_ema_fast == INVALID_HANDLE || handle_ema_slow == INVALID_HANDLE)
    {
       Print("Error creating indicators");
       return(INIT_FAILED);
@@ -409,16 +409,6 @@ void SellManagement(double bid) {
    }
 }
 
-/*
-bool ValidateBuyZone() {
-   double price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   if (price >= InpBuyUpperPrice && InpBuyUpperPrice != 0.0) return false;
-   else if (price <= InpBuyLowerPrice && InpBuyLowerPrice != 0.0) return false;
-   
-   return true;
-}
-*/
-
 bool ValidateZone(ENUM_POSITION_TYPE pos_type) {
    double price = SymbolInfoDouble(_Symbol, pos_type == POSITION_TYPE_BUY ? SYMBOL_BID : SYMBOL_ASK);
    double upper_price = pos_type == POSITION_TYPE_BUY ? InpBuyUpperPrice: InpSellUpperPrice;
@@ -526,30 +516,7 @@ double GetHighestSellPrice()
 }
 
 //+------------------------------------------------------------------+
-//| Get current Buy Stop price                                        |
-//+------------------------------------------------------------------+
-/*
-double GetBuyStopPrice()
-{
-   for(int i = OrdersTotal() - 1; i >= 0; i--)
-   {
-      ulong ticket = OrderGetTicket(i);
-      if(OrderSelect(ticket))
-      {
-         if(OrderGetString(ORDER_SYMBOL) == _Symbol &&
-            OrderGetInteger(ORDER_MAGIC) == InpMagicNumber &&
-            OrderGetInteger(ORDER_TYPE) == ORDER_TYPE_BUY_STOP)
-         {
-            return OrderGetDouble(ORDER_PRICE_OPEN);
-         }
-      }
-   }
-   return 0;
-}
-*/
-
-//+------------------------------------------------------------------+
-//| Get current Buy Stop price                                        |
+//| Get current Buy/Sell Stop price                                        |
 //+------------------------------------------------------------------+
 double GetCurrentStopPrice(ENUM_ORDER_TYPE order_type)
 {
@@ -618,7 +585,8 @@ bool PlaceBuyStop(double price)
    request.deviation = InpSlippage;
    request.magic = InpMagicNumber;
    request.comment = InpTradeComment;
-   request.type_filling = ORDER_FILLING_IOC;
+   //request.type_filling = ORDER_FILLING_IOC;
+   request.type_filling = ORDER_FILLING_RETURN;
    
    if(!OrderSend(request, result))
    {
@@ -664,7 +632,8 @@ bool PlaceSellStop(double price)
    request.deviation = InpSlippage;
    request.magic = InpMagicNumber;
    request.comment = InpTradeComment;
-   request.type_filling = ORDER_FILLING_IOC;
+   //request.type_filling = ORDER_FILLING_IOC;
+   request.type_filling = ORDER_FILLING_RETURN;
    
    if(!OrderSend(request, result))
    {
@@ -675,37 +644,6 @@ bool PlaceSellStop(double price)
    Print("Sell Stop placed at ", price, " | Ticket: ", result.order);
    return true;
 }
-
-//+------------------------------------------------------------------+
-//| Delete all Buy Stop orders                                        |
-//+------------------------------------------------------------------+
-/*
-void DeleteAllBuyStopOrders()
-{
-   for(int i = OrdersTotal() - 1; i >= 0; i--)
-   {
-      ulong ticket = OrderGetTicket(i);
-      if(OrderSelect(ticket))
-      {
-         if(OrderGetString(ORDER_SYMBOL) == _Symbol &&
-            OrderGetInteger(ORDER_MAGIC) == InpMagicNumber &&
-            OrderGetInteger(ORDER_TYPE) == ORDER_TYPE_BUY_STOP)
-         {
-            MqlTradeRequest request = {};
-            MqlTradeResult result = {};
-            
-            request.action = TRADE_ACTION_REMOVE;
-            request.order = ticket;
-            
-            if(OrderSend(request, result))
-            {
-               Print("Buy Stop deleted: ", ticket);
-            }
-         }
-      }
-   }
-}
-*/
 
 //+------------------------------------------------------------------+
 //| Delete all Buy/Sell Stop orders                                        |
@@ -737,56 +675,7 @@ void DeleteAllStopOrders(ENUM_ORDER_TYPE order_type)
 }
 
 //+------------------------------------------------------------------+
-//| Check net profit of all buy positions                             |
-//+------------------------------------------------------------------+
-/*
-bool CheckBuyNetProfit()
-{
-   double total_profit_points = 0;
-   double total_volume = 0;
-   double weighted_price = 0;
-   
-   double current_bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-   {
-      ulong ticket = PositionGetTicket(i);
-      if(PositionSelectByTicket(ticket))
-      {
-         if(PositionGetString(POSITION_SYMBOL) == _Symbol &&
-            PositionGetInteger(POSITION_MAGIC) == InpMagicNumber &&
-            PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY)
-         {
-            double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
-            double volume = PositionGetDouble(POSITION_VOLUME);
-            
-            weighted_price += open_price * volume;
-            total_volume += volume;
-         }
-      }
-   }
-   
-   if(total_volume > 0)
-   {
-      double average_price = weighted_price / total_volume;
-      total_profit_points = (current_bid - average_price) / g_point_value;
-      
-      Print("Average Price: ", average_price, " | Current Bid: ", current_bid, 
-            " | Profit Points: ", total_profit_points);
-      
-      if(total_profit_points >= InpBuyNetProfitPoints)
-      {
-         Print("Net profit target reached! Closing all buy positions...");
-         return true;
-      }
-   }
-   
-   return false;
-}
-*/
-
-//+------------------------------------------------------------------+
-//| Check net profit of all buy positions                             |
+//| Check net profit of all buy/sell positions                             |
 //+------------------------------------------------------------------+
 bool CheckNetProfit(ENUM_POSITION_TYPE pos_type)
 {
@@ -842,47 +731,8 @@ bool CheckNetProfit(ENUM_POSITION_TYPE pos_type)
 }
 
 //+------------------------------------------------------------------+
-//| Close all buy positions                                           |
+//| Close all buy/sell positions                                           |
 //+------------------------------------------------------------------+
-/*
-void CloseAllBuyPositions()
-{
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-   {
-      ulong ticket = PositionGetTicket(i);
-      if(PositionSelectByTicket(ticket))
-      {
-         if(PositionGetString(POSITION_SYMBOL) == _Symbol &&
-            PositionGetInteger(POSITION_MAGIC) == InpMagicNumber &&
-            PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY)
-         {
-            MqlTradeRequest request = {};
-            MqlTradeResult result = {};
-            
-            request.action = TRADE_ACTION_DEAL;
-            request.symbol = _Symbol;
-            request.volume = PositionGetDouble(POSITION_VOLUME);
-            request.type = ORDER_TYPE_SELL;
-            request.position = ticket;
-            request.price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-            request.deviation = InpSlippage;
-            request.magic = InpMagicNumber;
-            request.type_filling = ORDER_FILLING_IOC;
-            
-            if(OrderSend(request, result))
-            {
-               Print("Position closed: ", ticket, " | Profit: ", PositionGetDouble(POSITION_PROFIT));
-            }
-            else
-            {
-               Print("Error closing position: ", GetLastError());
-            }
-         }
-      }
-   }
-}
-*/
-
 void CloseAllPositions(ENUM_POSITION_TYPE pos_type)
 {
    for(int i = PositionsTotal() - 1; i >= 0; i--)
@@ -905,7 +755,8 @@ void CloseAllPositions(ENUM_POSITION_TYPE pos_type)
             request.price = SymbolInfoDouble(_Symbol, pos_type == POSITION_TYPE_BUY ? SYMBOL_BID: SYMBOL_ASK);
             request.deviation = InpSlippage;
             request.magic = InpMagicNumber;
-            request.type_filling = ORDER_FILLING_IOC;
+            //request.type_filling = ORDER_FILLING_IOC;
+            request.type_filling = ORDER_FILLING_RETURN;
             
             if(OrderSend(request, result))
             {
