@@ -90,9 +90,8 @@ input int InpEmaFast = 50; // [Buy] EMA Fast
 input int InpEmaSlow = 200; // [Buy] EMA Slow
 
 input group "=== STOCH ===";
-input bool InpEnableStochFilter = false; // Enable/Disable Stoch Filter
 input ENUM_TIMEFRAMES InpStochTF = PERIOD_M5; // TF for Stoch Indicator
-input int InpStochK = 5; // Stock K
+input int InpStochK = 14; // Stock K
 input int InpStochD = 3; // Stock D
 input int InpStochSlowing = 3; // Stoch Slowing
 input ENUM_MA_METHOD InpStochMAMethod = MODE_SMA; // moving average method for stoch
