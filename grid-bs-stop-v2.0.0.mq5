@@ -1,503 +1,630 @@
 //+------------------------------------------------------------------+
-//|                                            GridStopTrading.mq5 |
-//|                                  Copyright 2025, Pong Trading   |
+//|                                        GridTrading_BuyAndSellStop.mq5    |
+//|                                  Grid Trading with Buy Stop Only  |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2025, Pong Trading"
-#property link      ""
+#property copyright "Grid Trading System"
 #property version   "1.00"
+#property strict
 
-#include <Trade\Trade.mqh>
-
-// Input Parameters
-input group "=== Grid Settings ==="
-input double GridStep = 5000;              // Grid Step (จุด)
-input double PlacementDistance = 500;      // ระยะวาง Pending Order จากราคาปัจจุบัน (จุด)
-input double MaxDistance = 800;            // ระยะสูงสุดก่อนวาง Order ใหม่ (จุด)
-
-input group "=== Trading Mode ==="
-enum ENUM_GRID_MODE
-{
-   MODE_BUY_STOP_ONLY,    // Buy Stop Only
-   MODE_SELL_STOP_ONLY    // Sell Stop Only
+// Custom Enum
+enum ENUM_GRID_TYPE { 
+   GRID_CLOSE_ALL, // Close All
+   GRID_TP, // TP
+   GRID_TSL // Trailing Stop
 };
-input ENUM_GRID_MODE GridMode = MODE_BUY_STOP_ONLY;  // โหมดการเทรด
 
-input group "=== Close Mode ==="
-enum ENUM_CLOSE_MODE
-{
-   CLOSE_TP,              // TP Mode
-   CLOSE_ALL              // Close All Mode
+enum ENUM_NET_PROFIT { 
+   NET_PROFIT_POINTS, // Net Profit Points
+   NET_PROFIT_AMOUNT  // Net Profit Amount
 };
-input ENUM_CLOSE_MODE CloseMode = CLOSE_TP;          // โหมดการปิด Order
-input double TakeProfit = 5000;            // Take Profit (จุด) - สำหรับ TP Mode
-input double CloseAllProfit = 3000;        // Close All Profit (จุด) - สำหรับ Close All Mode
 
-input group "=== Order Settings ==="
-input double LotSize = 0.01;               // Lot Size
-input int MagicNumber = 123456;            // Magic Number
-input string TradeComment = "GridStop";    // Order Comment
+//--- Input Parameters
+input group "=== BUY GRID SETTINGS ===";
+input bool     InpBuyEnable = true;              // [Buy] Enable Trading
+input ENUM_GRID_TYPE InpBuyGridType = GRID_CLOSE_ALL; // Grid Type
+input int      InpBuyGridStep = 5000;             // Grid Step (points)
+input double   InpBuyGridStepMultiplier = 1.1;    // Grid Step Multiplier
+input int      InpBuyFollowDistance = 1500;       // Follow Distance (points)
+input int      InpBuyOrderDistance = 1000;        // Order Distance (points)
 
-// Global Variables
-CTrade trade;
-double point_value;
+input group "=== SELL GRID SETTINGS ===";
+input bool     InpSellEnable = false;              // [Sell] Enable Trading
+input ENUM_GRID_TYPE InpSellGridType = GRID_CLOSE_ALL; // Sell Grid Type
+input int      InpSellGridStep = 5000;             // [Sell] Grid Step (points)
+input double   InpSellGridStepMultiplier = 1.1;    // [Sell] Grid Step Multiplier
+input int      InpSellFollowDistance = 1500;       // [Sell] Follow Distance (points)
+input int      InpSellOrderDistance = 1000;        // [Sell] Order Distance (points)
+
+input group "=== BUY PROFIT ==="; 
+input ENUM_NET_PROFIT InpBuySumNetType = NET_PROFIT_POINTS; // Net Profit (Points/Amount)
+input int InpBuyNetProfitPoints = 3000; // Net Profit Points (points)
+input double InpBuyProfitTargetAmount = 10.0; // TP (Amount)
+
+input group "=== SELL PROFIT ==="; 
+input ENUM_NET_PROFIT InpSellSumNetType = NET_PROFIT_POINTS; // Net Profit (Points/Amount)
+input int InpSellNetProfitPoints = 3000; // [Sell] Net Profit Points (points)
+input double InpSellProfitTargetAmount = 10.0; // [Sell] TP (Amount)
+
+input group "=== BUY TRAILING STOP ==="; 
+input int InpBuyStartTrailAbroveAvgPoints = 500; // Start Trailing Stop (points)
+input int InpBuyTrailOffsetPoints = 300; // Trailing Stop Offset (points)
+input bool InpBuyTrailOnlyTighten = true; // Move SL just to get profit
+
+input group "=== SELL TRAILING STOP ==="; 
+input int InpSellStartTrailAbroveAvgPoints = 500; // Start Trailing Stop (points)
+input int InpSellTrailOffsetPoints = 300; // Trailing Stop Offset (points)
+input bool InpSellTrailOnlyTighten = true;  // Move SL just to get profit
+
+input group "=== BUY LOT SIZE ===";
+input double InpBuyLotSize = 0.01; // Start Lot
+input double InpBuyMartingale = 1.1; // Martingale Multiplier
+input double InpBuyMaxLots = 0.05; // Maximum Lot
+
+input group "=== SELL LOT SIZE ===";
+input double InpSellLotSize = 0.01; // Start Lot
+input double InpSellMartingale = 1.1; // Martingale Multiplier
+input double InpSellMaxLots = 0.05; // Maximum Lot
+
+input group "=== BUY ZONE FILTER ===";
+input bool InpBuyEnablePriceZone = false; // Enable/Disable Price Zone
+input double InpBuyUpperPrice = 0.0; // Upper Price (0 = No Limit)
+input double InpBuyLowerPrice = 0.0; // Lower Price (0 = No Limit)
+
+input group "=== SELL ZONE FILTER ===";
+input bool InpSellEnablePriceZone = false; // Enable/Disable Price Zone
+input double InpSellUpperPrice = 0.0; // Upper Price (0 = No Limit)
+input double InpSellLowerPrice = 0.0; // Lower Price (0 = No Limit)
+
+input group "=== OTHER ===";
+input int      InpMagicNumber = 2025111101;        // Magic Number
+input int      InpSlippage = 10; // Slippage (points)
+input string   InpTradeComment = "Grid_BuyStop"; // Comment
+
+struct ProfitInfo{
+  double profit;
+  double volume;
+  int count;
+};
+
+//--- Global Variables
+double g_point_value;
+int g_digits;
 
 //+------------------------------------------------------------------+
-//| Expert initialization function                                   |
+//| Expert initialization function                                    |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   trade.SetExpertMagicNumber(MagicNumber);
-   trade.SetDeviationInPoints(10);
+   //--- Get symbol properties
+   g_point_value = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+   g_digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
    
-   // คำนวณค่า point
-   if(_Digits == 5 || _Digits == 3)
-      point_value = _Point * 10;
-   else
-      point_value = _Point;
+   //--- Check parameters
+   if(InpBuyGridStep <= 0 || InpBuyFollowDistance <= 0 || InpBuyOrderDistance <= 0)
+   {
+      Print("Error: Invalid input parameters!");
+      return(INIT_PARAMETERS_INCORRECT);
+   }
    
-   Print("Grid Stop Trading EA เริ่มทำงาน");
-   Print("โหมด: ", EnumToString(GridMode));
-   Print("โหมดปิด: ", EnumToString(CloseMode));
+   Print("Grid Trading EA initialized successfully");
+   Print("Grid Step: ", InpBuyGridStep, " points");
+   Print("Follow Distance: ", InpBuyFollowDistance, " points");
+   Print("Order Distance: ", InpBuyOrderDistance, " points");
+   Print("Net Profit Points: ", InpBuyNetProfitPoints, " points");
    
    return(INIT_SUCCEEDED);
 }
 
 //+------------------------------------------------------------------+
-//| Expert deinitialization function                                 |
+//| Expert deinitialization function                                  |
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-   Print("Grid Stop Trading EA หยุดทำงาน");
+   Print("EA deinitialized. Reason: ", reason);
 }
 
 //+------------------------------------------------------------------+
-//| Expert tick function                                             |
+//| Expert tick function                                              |
 //+------------------------------------------------------------------+
 void OnTick()
 {
-   // ตรวจสอบและจัดการ Close All Mode
-   if(CloseMode == CLOSE_ALL)
-   {
-      CheckAndCloseAll();
-   }
+   //--- Get current prices
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    
-   // จัดการ Pending Orders ตามโหมด
-   if(GridMode == MODE_BUY_STOP_ONLY)
-   {
-      ManageBuyStopOrders();
-   }
-   else if(GridMode == MODE_SELL_STOP_ONLY)
-   {
-      ManageSellStopOrders();
-   }
-}
-
-//+------------------------------------------------------------------+
-//| จัดการ Buy Stop Orders                                           |
-//+------------------------------------------------------------------+
-void ManageBuyStopOrders()
-{
-   int pendingBuyStop = CountPendingOrders(ORDER_TYPE_BUY_STOP);
-   double currentPrice = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   //--- Count positions and orders
+   int buy_positions = CountPositions(POSITION_TYPE_BUY);
+   int buy_stop_orders = CountPendingOrders(ORDER_TYPE_BUY_STOP);
    
-   if(pendingBuyStop == 0)
+   //--- Check if we should close all positions (Profit Target)
+   if(buy_positions > 0)
    {
-      // หาตำแหน่ง Position Buy ล่างสุด
-      double lowestBuyPrice = GetLowestBuyPosition();
-      double orderPrice;
-      
-      if(lowestBuyPrice == 0) // ไม่มี Position Buy
+      if(CheckNetProfit() && InpBuyGridType == GRID_CLOSE_ALL)
       {
-         orderPrice = currentPrice + (PlacementDistance * point_value);
+         CloseAllBuyPositions();
+         DeleteAllBuyStopOrders();
+         return;
       }
-      else
+      
+      if(CheckNetProfit() && InpBuyGridType == GRID_TSL)
       {
-         // วาง Order ห่างจาก Position Buy ล่างสุด ลบ Grid Step
-         orderPrice = lowestBuyPrice - (GridStep * point_value);
+         MaybeTrailAll(POSITION_TYPE_BUY);
+         //DeleteAllBuyStopOrders();
+         return;
+      }
+   }
+   
+   //--- Get lowest buy position price
+   double lowest_buy_price = GetLowestBuyPrice();
+   
+   //--- Condition 1: No Buy Position - Place Buy Stop
+   if(buy_positions == 0 && buy_stop_orders == 0)
+   {
+      double buy_stop_price = NormalizeDouble(ask + InpBuyOrderDistance * g_point_value, g_digits);
+      PlaceBuyStop(buy_stop_price);
+      return;
+   }
+   
+   //--- Condition 2: Follow price down (adjust Buy Stop)
+   if(buy_positions == 0 && buy_stop_orders > 0)
+   {
+      double current_buy_stop_price = GetBuyStopPrice();
+      if(current_buy_stop_price > 0)
+      {
+         double distance = (current_buy_stop_price - ask) / g_point_value;
          
-         // ตรวจสอบว่าไม่วาง Order ต่ำกว่า current price + PlacementDistance
-         double minPrice = currentPrice + (PlacementDistance * point_value);
-         if(orderPrice < minPrice)
-            orderPrice = minPrice;
+         // ถ้าระยะห่างมากกว่าหรือเท่ากับ Follow Distance
+         if(distance >= InpBuyFollowDistance)
+         {
+            DeleteAllBuyStopOrders();
+            double new_buy_stop_price = NormalizeDouble(ask + InpBuyOrderDistance * g_point_value, g_digits);
+            PlaceBuyStop(new_buy_stop_price);
+         }
       }
-      
-      // วาง Buy Stop Order
-      PlaceBuyStopOrder(orderPrice);
+      return;
    }
-   else
-   {
-      // ตรวจสอบ Pending Buy Stop Order ที่มีอยู่
-      CheckAndUpdateBuyStopOrder(currentPrice);
-   }
-}
-
-//+------------------------------------------------------------------+
-//| จัดการ Sell Stop Orders                                          |
-//+------------------------------------------------------------------+
-void ManageSellStopOrders()
-{
-   int pendingSellStop = CountPendingOrders(ORDER_TYPE_SELL_STOP);
-   double currentPrice = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    
-   if(pendingSellStop == 0)
+   
+   
+   //--- Condition 3 & 4: Has Buy Position - Manage Buy Stop
+   if(buy_positions > 0)
    {
-      // หาตำแหน่ง Position Sell บนสุด
-      double highestSellPrice = GetHighestSellPosition();
-      double orderPrice;
+      int grid_step_result = (int)(InpBuyGridStep * pow(InpBuyGridStepMultiplier, CountPositions(POSITION_TYPE_BUY) - 1));
+      double threshold_price = lowest_buy_price - (grid_step_result + InpBuyFollowDistance) * g_point_value;
       
-      if(highestSellPrice == 0) // ไม่มี Position Sell
+      // ถ้าไม่มี Buy Stop และราคา Ask ต่ำกว่า threshold
+      if(buy_stop_orders == 0 && ask < threshold_price)
       {
-         orderPrice = currentPrice - (PlacementDistance * point_value);
-      }
-      else
-      {
-         // วาง Order ห่างจาก Position Sell บนสุด บวก Grid Step
-         orderPrice = highestSellPrice + (GridStep * point_value);
+         // ตั้ง Buy Stop ที่ต่ำกว่า lowest position ตาม Grid Step
+         double new_buy_stop_price = NormalizeDouble(lowest_buy_price - grid_step_result * g_point_value, g_digits);
          
-         // ตรวจสอบว่าไม่วาง Order สูงกว่า current price - PlacementDistance
-         double maxPrice = currentPrice - (PlacementDistance * point_value);
-         if(orderPrice > maxPrice)
-            orderPrice = maxPrice;
+         // ตรวจสอบว่าไม่เหนือ lowest position
+         if(new_buy_stop_price < lowest_buy_price)
+         {
+            PlaceBuyStop(new_buy_stop_price);
+         }
       }
       
-      // วาง Sell Stop Order
-      PlaceSellStopOrder(orderPrice);
-   }
-   else
-   {
-      // ตรวจสอบ Pending Sell Stop Order ที่มีอยู่
-      CheckAndUpdateSellStopOrder(currentPrice);
+      // ถ้ามี Buy Stop อยู่แล้ว ตรวจสอบว่าไม่เหนือ lowest position
+      if(buy_stop_orders > 0)
+      {
+         double current_buy_stop_price = GetBuyStopPrice();
+         double new_buy_stop_price = NormalizeDouble(ask + InpBuyOrderDistance * g_point_value, g_digits);
+         //if(current_buy_stop_price >= lowest_buy_price || current_buy_stop_price >= ask + (grid_step_result + InpBuyFollowDistance) * g_point_value)
+         /*if(current_buy_stop_price >= lowest_buy_price || current_buy_stop_price >= ask + (grid_step_result + InpBuyFollowDistance) * g_point_value)
+         {
+            DeleteAllBuyStopOrders();
+            PlaceBuyStop(new_buy_stop_price);
+         }*/
+         if(current_buy_stop_price >= lowest_buy_price)
+         {
+            DeleteAllBuyStopOrders();
+         }
+         if(ask <= threshold_price && current_buy_stop_price > ask + InpBuyFollowDistance * g_point_value)
+         {
+            DeleteAllBuyStopOrders();
+            PlaceBuyStop(new_buy_stop_price);
+         }
+      }
    }
 }
 
+double pips(int pts){ return (double)pts * _Point; }
+bool   IsBuy(ENUM_POSITION_TYPE t){ return (t==POSITION_TYPE_BUY); }
+bool   IsSell(ENUM_POSITION_TYPE t){ return (t==POSITION_TYPE_SELL); }
+bool   IsMySymbol(const string sym){ return (sym==_Symbol); }
+
+bool ValidateZone() {
+   double price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   if (price >= InpBuyUpperPrice && InpBuyUpperPrice != 0.0) return false;
+   else if (price <= InpBuyLowerPrice && InpBuyLowerPrice != 0.0) return false;
+   
+   return true;
+}
+
 //+------------------------------------------------------------------+
-//| นับจำนวน Pending Orders                                          |
+//| Count positions by type                                           |
 //+------------------------------------------------------------------+
-int CountPendingOrders(ENUM_ORDER_TYPE orderType)
+int CountPositions(ENUM_POSITION_TYPE pos_type)
 {
    int count = 0;
-   int total = OrdersTotal();
-   
-   for(int i = 0; i < total; i++)
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
-      ulong ticket = OrderGetTicket(i);
-      if(ticket > 0)
+      ulong ticket = PositionGetTicket(i);
+      if(PositionSelectByTicket(ticket))
       {
-         if(OrderGetString(ORDER_SYMBOL) == _Symbol &&
-            OrderGetInteger(ORDER_MAGIC) == MagicNumber &&
-            OrderGetInteger(ORDER_TYPE) == orderType)
+         if(PositionGetString(POSITION_SYMBOL) == _Symbol &&
+            PositionGetInteger(POSITION_MAGIC) == InpMagicNumber &&
+            PositionGetInteger(POSITION_TYPE) == pos_type)
          {
             count++;
          }
       }
    }
-   
    return count;
 }
 
 //+------------------------------------------------------------------+
-//| หาราคา Position Buy ล่างสุด                                     |
+//| Count pending orders by type                                      |
 //+------------------------------------------------------------------+
-double GetLowestBuyPosition()
+int CountPendingOrders(ENUM_ORDER_TYPE order_type)
 {
-   double lowestPrice = 0;
-   int total = PositionsTotal();
-   
-   for(int i = 0; i < total; i++)
+   int count = 0;
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(OrderSelect(ticket))
+      {
+         if(OrderGetString(ORDER_SYMBOL) == _Symbol &&
+            OrderGetInteger(ORDER_MAGIC) == InpMagicNumber &&
+            OrderGetInteger(ORDER_TYPE) == order_type)
+         {
+            count++;
+         }
+      }
+   }
+   return count;
+}
+
+//+------------------------------------------------------------------+
+//| Get lowest buy position price                                     |
+//+------------------------------------------------------------------+
+double GetLowestBuyPrice()
+{
+   double lowest = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong ticket = PositionGetTicket(i);
-      if(ticket > 0)
+      if(PositionSelectByTicket(ticket))
       {
          if(PositionGetString(POSITION_SYMBOL) == _Symbol &&
-            PositionGetInteger(POSITION_MAGIC) == MagicNumber &&
+            PositionGetInteger(POSITION_MAGIC) == InpMagicNumber &&
             PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY)
          {
-            double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
-            if(lowestPrice == 0 || openPrice < lowestPrice)
-               lowestPrice = openPrice;
+            double price = PositionGetDouble(POSITION_PRICE_OPEN);
+            if(lowest == 0 || price < lowest)
+            {
+               lowest = price;
+            }
          }
       }
    }
-   
-   return lowestPrice;
+   return lowest;
 }
 
 //+------------------------------------------------------------------+
-//| หาราคา Position Sell บนสุด                                      |
+//| Get current Buy Stop price                                        |
 //+------------------------------------------------------------------+
-double GetHighestSellPosition()
+double GetBuyStopPrice()
 {
-   double highestPrice = 0;
-   int total = PositionsTotal();
-   
-   for(int i = 0; i < total; i++)
-   {
-      ulong ticket = PositionGetTicket(i);
-      if(ticket > 0)
-      {
-         if(PositionGetString(POSITION_SYMBOL) == _Symbol &&
-            PositionGetInteger(POSITION_MAGIC) == MagicNumber &&
-            PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL)
-         {
-            double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
-            if(openPrice > highestPrice)
-               highestPrice = openPrice;
-         }
-      }
-   }
-   
-   return highestPrice;
-}
-
-//+------------------------------------------------------------------+
-//| วาง Buy Stop Order                                               |
-//+------------------------------------------------------------------+
-void PlaceBuyStopOrder(double price)
-{
-   double tp = 0;
-   if(CloseMode == CLOSE_TP)
-      tp = price + (TakeProfit * point_value);
-   
-   price = NormalizeDouble(price, _Digits);
-   if(tp > 0)
-      tp = NormalizeDouble(tp, _Digits);
-   
-   if(trade.BuyStop(LotSize, price, _Symbol, 0, tp, ORDER_TIME_GTC, 0, TradeComment))
-   {
-      Print("วาง Buy Stop Order สำเร็จ ที่ราคา: ", price);
-   }
-   else
-   {
-      Print("วาง Buy Stop Order ไม่สำเร็จ: ", GetLastError());
-   }
-}
-
-//+------------------------------------------------------------------+
-//| วาง Sell Stop Order                                              |
-//+------------------------------------------------------------------+
-void PlaceSellStopOrder(double price)
-{
-   double tp = 0;
-   if(CloseMode == CLOSE_TP)
-      tp = price - (TakeProfit * point_value);
-   
-   price = NormalizeDouble(price, _Digits);
-   if(tp > 0)
-      tp = NormalizeDouble(tp, _Digits);
-   
-   if(trade.SellStop(LotSize, price, _Symbol, 0, tp, ORDER_TIME_GTC, 0, TradeComment))
-   {
-      Print("วาง Sell Stop Order สำเร็จ ที่ราคา: ", price);
-   }
-   else
-   {
-      Print("วาง Sell Stop Order ไม่สำเร็จ: ", GetLastError());
-   }
-}
-
-//+------------------------------------------------------------------+
-//| ตรวจสอบและอัพเดท Buy Stop Order                                 |
-//+------------------------------------------------------------------+
-void CheckAndUpdateBuyStopOrder(double currentPrice)
-{
-   int total = OrdersTotal();
-   
-   for(int i = total - 1; i >= 0; i--)
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
    {
       ulong ticket = OrderGetTicket(i);
-      if(ticket > 0)
+      if(OrderSelect(ticket))
       {
          if(OrderGetString(ORDER_SYMBOL) == _Symbol &&
-            OrderGetInteger(ORDER_MAGIC) == MagicNumber &&
+            OrderGetInteger(ORDER_MAGIC) == InpMagicNumber &&
             OrderGetInteger(ORDER_TYPE) == ORDER_TYPE_BUY_STOP)
          {
-            double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
-            double distance = (orderPrice - currentPrice) / point_value;
-            
-            // ถ้าห่างจากราคาปัจจุบันมากกว่าหรือเท่ากับ MaxDistance และไม่เลื่อนขึ้น
-            if(distance >= MaxDistance)
-            {
-               // ลบ Order เก่า
-               if(trade.OrderDelete(ticket))
-               {
-                  Print("ลบ Buy Stop Order เก่าที่ห่างเกินไป: ", ticket);
-                  
-                  // วาง Order ใหม่
-                  double lowestBuyPrice = GetLowestBuyPosition();
-                  double newOrderPrice;
-                  
-                  if(lowestBuyPrice == 0)
-                  {
-                     newOrderPrice = currentPrice + (PlacementDistance * point_value);
-                  }
-                  else
-                  {
-                     newOrderPrice = lowestBuyPrice - (GridStep * point_value);
-                     double minPrice = currentPrice + (PlacementDistance * point_value);
-                     
-                     // ไม่วาง Order สูงกว่า Position Buy ล่างสุด
-                     if(newOrderPrice > lowestBuyPrice)
-                        return;
-                     
-                     // ไม่วาง Order ต่ำกว่า minPrice
-                     if(newOrderPrice < minPrice)
-                        newOrderPrice = minPrice;
-                  }
-                  
-                  PlaceBuyStopOrder(newOrderPrice);
-               }
-            }
-            break;
+            return OrderGetDouble(ORDER_PRICE_OPEN);
          }
       }
    }
+   return 0;
+}
+
+double CalTagetPrice(ENUM_POSITION_TYPE pos_type) // Buy -> ask, Sell -> bid
+{
+   // คำนวณการเปลี่ยนแปลงของราคา
+   double price_change = InpBuyNetProfitPoints * g_point_value;
+   
+   double current_price = SymbolInfoDouble(_Symbol, pos_type == POSITION_TYPE_BUY ? SYMBOL_ASK: SYMBOL_BID);
+   
+   // คำนวณราคาเป้าหมาย
+   double target_price = current_price + (pos_type == POSITION_TYPE_BUY ? price_change : -price_change);
+   
+   // หากต้องการให้ราคาอยู่ในรูปที่ถูกต้องตาม Tick Size (แนะนำ)
+   // ควรใช้ฟังก์ชัน NormailzeDouble() เพื่อปรับทศนิยมให้ถูกต้องตาม Symbol
+   return NormalizeDouble(target_price, g_digits);
 }
 
 //+------------------------------------------------------------------+
-//| ตรวจสอบและอัพเดท Sell Stop Order                                |
+//| Place Buy Stop order                                              |
 //+------------------------------------------------------------------+
-void CheckAndUpdateSellStopOrder(double currentPrice)
+bool PlaceBuyStop(double price)
 {
-   int total = OrdersTotal();
+   bool isTradeZone = ValidateZone();
+   if (InpBuyEnablePriceZone && !isTradeZone) return false;
    
-   for(int i = total - 1; i >= 0; i--)
+   MqlTradeRequest request = {};
+   MqlTradeResult result = {};
+   
+   double next_lots = NormalizeDouble(InpBuyLotSize * pow(InpBuyMartingale, CountPositions(POSITION_TYPE_BUY)), 2);
+   if (next_lots > InpBuyMaxLots) next_lots = InpBuyMaxLots;
+   
+   double tp_price = 0;
+   if (InpBuyGridType == GRID_TP) {
+      //if(dir==DIR_BUY) tpPrice = CalTagetPrice(tk.ask, InpProfitTargetPts);
+      //else tpPrice = CalTagetPrice(tk.bid, InpProfitTargetPts); 
+      tp_price = CalTagetPrice(POSITION_TYPE_BUY);
+   }
+   
+   request.action = TRADE_ACTION_PENDING;
+   request.symbol = _Symbol;
+   request.volume = next_lots;
+   request.type = ORDER_TYPE_BUY_STOP;
+   request.price = price;
+   request.sl = 0;
+   request.tp = tp_price;
+   request.deviation = InpSlippage;
+   request.magic = InpMagicNumber;
+   request.comment = InpTradeComment;
+   request.type_filling = ORDER_FILLING_IOC;
+   
+   if(!OrderSend(request, result))
+   {
+      Print("Error placing Buy Stop: ", GetLastError(), " - ", result.comment);
+      return false;
+   }
+   
+   Print("Buy Stop placed at ", price, " | Ticket: ", result.order);
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Delete all Buy Stop orders                                        |
+//+------------------------------------------------------------------+
+void DeleteAllBuyStopOrders()
+{
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
    {
       ulong ticket = OrderGetTicket(i);
-      if(ticket > 0)
+      if(OrderSelect(ticket))
       {
          if(OrderGetString(ORDER_SYMBOL) == _Symbol &&
-            OrderGetInteger(ORDER_MAGIC) == MagicNumber &&
-            OrderGetInteger(ORDER_TYPE) == ORDER_TYPE_SELL_STOP)
+            OrderGetInteger(ORDER_MAGIC) == InpMagicNumber &&
+            OrderGetInteger(ORDER_TYPE) == ORDER_TYPE_BUY_STOP)
          {
-            double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
-            double distance = (currentPrice - orderPrice) / point_value;
+            MqlTradeRequest request = {};
+            MqlTradeResult result = {};
             
-            // ถ้าห่างจากราคาปัจจุบันน้อยกว่าหรือเท่ากับ MaxDistance และไม่เลื่อนลง
-            if(distance >= MaxDistance)
+            request.action = TRADE_ACTION_REMOVE;
+            request.order = ticket;
+            
+            if(OrderSend(request, result))
             {
-               // ลบ Order เก่า
-               if(trade.OrderDelete(ticket))
-               {
-                  Print("ลบ Sell Stop Order เก่าที่ห่างเกินไป: ", ticket);
-                  
-                  // วาง Order ใหม่
-                  double highestSellPrice = GetHighestSellPosition();
-                  double newOrderPrice;
-                  
-                  if(highestSellPrice == 0)
-                  {
-                     newOrderPrice = currentPrice - (PlacementDistance * point_value);
-                  }
-                  else
-                  {
-                     newOrderPrice = highestSellPrice + (GridStep * point_value);
-                     double maxPrice = currentPrice - (PlacementDistance * point_value);
-                     
-                     // ไม่วาง Order ต่ำกว่า Position Sell บนสุด
-                     if(newOrderPrice < highestSellPrice)
-                        return;
-                     
-                     // ไม่วาง Order สูงกว่า maxPrice
-                     if(newOrderPrice > maxPrice)
-                        newOrderPrice = maxPrice;
-                  }
-                  
-                  PlaceSellStopOrder(newOrderPrice);
-               }
+               Print("Buy Stop deleted: ", ticket);
             }
-            break;
          }
       }
    }
 }
 
 //+------------------------------------------------------------------+
-//| ตรวจสอบและปิด Order ทั้งหมดตามโหมด Close All                    |
+//| Check net profit of all buy positions                             |
 //+------------------------------------------------------------------+
-void CheckAndCloseAll()
+bool CheckNetProfit()
 {
-   // ตรวจสอบ Buy Positions
-   double buyProfit = CalculateAverageProfitPoints(POSITION_TYPE_BUY);
-   if(buyProfit >= CloseAllProfit)
-   {
-      CloseAllPositions(POSITION_TYPE_BUY);
-   }
+   double total_profit_points = 0;
+   double total_volume = 0;
+   double weighted_price = 0;
    
-   // ตรวจสอบ Sell Positions
-   double sellProfit = CalculateAverageProfitPoints(POSITION_TYPE_SELL);
-   if(sellProfit >= CloseAllProfit)
-   {
-      CloseAllPositions(POSITION_TYPE_SELL);
-   }
-}
-
-//+------------------------------------------------------------------+
-//| คำนวณกำไรเฉลี่ยเป็นจุด                                          |
-//+------------------------------------------------------------------+
-double CalculateAverageProfitPoints(ENUM_POSITION_TYPE posType)
-{
-   double totalPrice = 0;
-   double totalVolume = 0;
-   double currentPrice = (posType == POSITION_TYPE_BUY) ? 
-                         SymbolInfoDouble(_Symbol, SYMBOL_BID) : 
-                         SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   double current_bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    
-   int total = PositionsTotal();
-   
-   for(int i = 0; i < total; i++)
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong ticket = PositionGetTicket(i);
-      if(ticket > 0)
+      if(PositionSelectByTicket(ticket))
       {
          if(PositionGetString(POSITION_SYMBOL) == _Symbol &&
-            PositionGetInteger(POSITION_MAGIC) == MagicNumber &&
-            PositionGetInteger(POSITION_TYPE) == posType)
+            PositionGetInteger(POSITION_MAGIC) == InpMagicNumber &&
+            PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY)
          {
-            double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+            double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
             double volume = PositionGetDouble(POSITION_VOLUME);
             
-            totalPrice += openPrice * volume;
-            totalVolume += volume;
+            weighted_price += open_price * volume;
+            total_volume += volume;
          }
       }
    }
    
-   if(totalVolume == 0)
-      return 0;
+   if(total_volume > 0)
+   {
+      double average_price = weighted_price / total_volume;
+      total_profit_points = (current_bid - average_price) / g_point_value;
+      
+      Print("Average Price: ", average_price, " | Current Bid: ", current_bid, 
+            " | Profit Points: ", total_profit_points);
+      
+      if(total_profit_points >= InpBuyNetProfitPoints)
+      {
+         Print("Net profit target reached! Closing all buy positions...");
+         return true;
+      }
+   }
    
-   double averagePrice = totalPrice / totalVolume;
-   double profitPoints = 0;
-   
-   if(posType == POSITION_TYPE_BUY)
-      profitPoints = (currentPrice - averagePrice) / point_value;
-   else
-      profitPoints = (averagePrice - currentPrice) / point_value;
-   
-   return profitPoints;
+   return false;
 }
 
 //+------------------------------------------------------------------+
-//| ปิด Position ทั้งหมดตามประเภท                                   |
+//| Close all buy positions                                           |
 //+------------------------------------------------------------------+
-void CloseAllPositions(ENUM_POSITION_TYPE posType)
+void CloseAllBuyPositions()
 {
-   int total = PositionsTotal();
-   
-   for(int i = total - 1; i >= 0; i--)
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong ticket = PositionGetTicket(i);
-      if(ticket > 0)
+      if(PositionSelectByTicket(ticket))
       {
          if(PositionGetString(POSITION_SYMBOL) == _Symbol &&
-            PositionGetInteger(POSITION_MAGIC) == MagicNumber &&
-            PositionGetInteger(POSITION_TYPE) == posType)
+            PositionGetInteger(POSITION_MAGIC) == InpMagicNumber &&
+            PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY)
          {
-            if(trade.PositionClose(ticket))
+            MqlTradeRequest request = {};
+            MqlTradeResult result = {};
+            
+            request.action = TRADE_ACTION_DEAL;
+            request.symbol = _Symbol;
+            request.volume = PositionGetDouble(POSITION_VOLUME);
+            request.type = ORDER_TYPE_SELL;
+            request.position = ticket;
+            request.price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+            request.deviation = InpSlippage;
+            request.magic = InpMagicNumber;
+            request.type_filling = ORDER_FILLING_IOC;
+            
+            if(OrderSend(request, result))
             {
-               Print("ปิด Position สำเร็จ: ", ticket);
+               Print("Position closed: ", ticket, " | Profit: ", PositionGetDouble(POSITION_PROFIT));
+            }
+            else
+            {
+               Print("Error closing position: ", GetLastError());
             }
          }
       }
    }
 }
+
+bool TradePositionModify(ulong ticket, double sl, double tp)
+{
+  MqlTradeRequest req;
+  ZeroMemory(req);
+  req.action  = TRADE_ACTION_SLTP;
+  req.position= ticket;
+  req.symbol  = _Symbol;
+  req.sl      = sl;
+  req.tp      = tp;
+
+  MqlTradeResult res;
+  if(!OrderSend(req, res)){
+    Print("Modify failed: ", GetLastError());
+    return false;
+  }
+  return true;
+}
+
+// คำนวณ Profit แยกตาม Position Type
+ProfitInfo CalculateProfit(ENUM_POSITION_TYPE type)
+{
+  ProfitInfo info;
+  info.profit = 0;
+  info.volume = 0;
+  info.count = 0;
+  
+  int total = PositionsTotal();
+  for(int i=0; i<total; i++){
+    ulong ticket = PositionGetTicket(i);
+    if(ticket == 0) continue;
+    if(!PositionSelectByTicket(ticket)) continue;
+    if(!IsMySymbol((string)PositionGetString(POSITION_SYMBOL))) continue;
+    
+    if((long)PositionGetInteger(POSITION_MAGIC) != InpMagicNumber) 
+      continue;
+    
+    if((ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) == type){
+      info.profit += PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+      info.volume += PositionGetDouble(POSITION_VOLUME);
+      info.count++;
+    }
+  }
+  
+  return info;
+}
+
+double VWAP(ENUM_POSITION_TYPE side)
+{
+  int total=PositionsTotal();
+  double v=0, pxv=0;
+  for(int i=0;i<total;i++){
+    ulong ticket=PositionGetTicket(i);
+    if(ticket==0) continue;
+    if(!PositionSelectByTicket(ticket)) continue;
+    if(!IsMySymbol((string)PositionGetString(POSITION_SYMBOL))) continue;
+    if((long)PositionGetInteger(POSITION_MAGIC)!=InpMagicNumber) continue;
+    if((ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE)!=side) continue;
+
+    double lot = PositionGetDouble(POSITION_VOLUME);
+    double prc = PositionGetDouble(POSITION_PRICE_OPEN);
+    v   += lot;
+    pxv += lot*prc;
+  }
+  if(v<=0) return 0.0;
+  return pxv/v;
+}
+
+void MaybeTrailAll(ENUM_POSITION_TYPE pos_type)
+{
+  // คำนวณ Profit เฉพาะฝั่งนี้
+  ProfitInfo info = CalculateProfit(pos_type);
+  if(info.profit <= 0) return; // ต้องกำไรลอยเท่านั้น
+
+  double avgPrice = VWAP(pos_type);
+  if(avgPrice <= 0) return;
+
+  /*double price = (first.type==POSITION_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_BID)
+                                                 : SymbolInfoDouble(_Symbol, SYMBOL_ASK);*/
+                                                
+  double price = true ? SymbolInfoDouble(_Symbol, SYMBOL_BID): SymbolInfoDouble(_Symbol, SYMBOL_ASK);                                                
+
+  double need = pips(InpBuyStartTrailAbroveAvgPoints);
+  bool ok=false;
+  if(IsBuy(pos_type)){
+    ok = (price >= (avgPrice + need));
+  }else{
+    ok = (price <= (avgPrice - need));
+  }
+  if(!ok) return;
+
+  double trail = pips(InpBuyTrailOffsetPoints);
+  int total=PositionsTotal();
+  for(int i=0;i<total;i++){
+    ulong ticket=PositionGetTicket(i);
+    if(ticket==0) continue;
+    if(!PositionSelectByTicket(ticket)) continue;
+    if(!IsMySymbol((string)PositionGetString(POSITION_SYMBOL))) continue;
+    if((long)PositionGetInteger(POSITION_MAGIC)!=InpMagicNumber) continue;
+    if((ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE)!=pos_type) continue;
+
+    double curSL = PositionGetDouble(POSITION_SL);
+    double curTP = PositionGetDouble(POSITION_TP);
+    double newSL = curSL;
+
+    if(IsBuy(pos_type)){
+      double targetSL = price - trail;
+      if(InpBuyTrailOnlyTighten) newSL = (curSL<=0) ? targetSL : MathMax(curSL, targetSL);
+      else newSL = targetSL;
+    }else{
+      double targetSL = price + trail;
+      if(InpBuyTrailOnlyTighten) newSL = (curSL<=0) ? targetSL : MathMin(curSL, targetSL);
+      else newSL = targetSL;
+    }
+
+    if(newSL != curSL){
+      TradePositionModify(ticket, newSL, curTP);
+    }
+  }
+}
+
 //+------------------------------------------------------------------+
