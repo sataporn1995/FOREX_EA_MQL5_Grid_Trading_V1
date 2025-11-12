@@ -585,8 +585,8 @@ bool PlaceBuyStop(double price)
    request.deviation = InpSlippage;
    request.magic = InpMagicNumber;
    request.comment = InpTradeComment;
-   //request.type_filling = ORDER_FILLING_IOC;
-   request.type_filling = ORDER_FILLING_RETURN;
+   request.type_filling = ORDER_FILLING_IOC;
+   //request.type_filling = ORDER_FILLING_RETURN;
    
    if(!OrderSend(request, result))
    {
@@ -632,8 +632,8 @@ bool PlaceSellStop(double price)
    request.deviation = InpSlippage;
    request.magic = InpMagicNumber;
    request.comment = InpTradeComment;
-   //request.type_filling = ORDER_FILLING_IOC;
-   request.type_filling = ORDER_FILLING_RETURN;
+   request.type_filling = ORDER_FILLING_IOC;
+   //request.type_filling = ORDER_FILLING_RETURN;
    
    if(!OrderSend(request, result))
    {
@@ -755,8 +755,8 @@ void CloseAllPositions(ENUM_POSITION_TYPE pos_type)
             request.price = SymbolInfoDouble(_Symbol, pos_type == POSITION_TYPE_BUY ? SYMBOL_BID: SYMBOL_ASK);
             request.deviation = InpSlippage;
             request.magic = InpMagicNumber;
-            //request.type_filling = ORDER_FILLING_IOC;
-            request.type_filling = ORDER_FILLING_RETURN;
+            request.type_filling = ORDER_FILLING_IOC;
+            //request.type_filling = ORDER_FILLING_RETURN;
             
             if(OrderSend(request, result))
             {
