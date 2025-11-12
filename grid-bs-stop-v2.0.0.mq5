@@ -47,6 +47,10 @@ input bool InpBuyEnablePriceZone = false; // [Buy] Enable/Disable Price Zone
 input double InpBuyUpperPrice = 0.0; // [Buy] Upper Price (0 = No Limit)
 input double InpBuyLowerPrice = 0.0; // [Buy] Lower Price (0 = No Limit)
 
+input group "=== BUY FILTER ===";
+input bool InpBuyEnableTrend = false; // [Buy] Enable/Disable Trend Filter by 2 EMA
+input bool InpBuyEnableStoch = false; // [Buy] Enable/Disable Stoch Filter
+
 input group "++++++++++ SELL GRID SETTINGS ++++++++++";
 input bool     InpSellEnable = false;              // [Sell] Enable Trading
 input ENUM_GRID_TYPE InpSellGridType = GRID_CLOSE_ALL; // [Sell] Grid Type
@@ -75,6 +79,27 @@ input bool InpSellEnablePriceZone = false; // [Sell] Enable/Disable Price Zone
 input double InpSellUpperPrice = 0.0; // [Sell] Upper Price (0 = No Limit)
 input double InpSellLowerPrice = 0.0; // [Sell] Lower Price (0 = No Limit)
 
+input group "=== SELL FILTER ===";
+input bool InpSellEnableTrend = false; // [Sell] Enable/Disable Trend Filter by 2 EMA
+input bool InpSellEnableStoch = false; // [Sell] Enable/Disable Stoch Filter
+
+input group "++++++++++ INDICATOR FILTER ++++++++++";
+input group "=== TREND ===";
+input ENUM_TIMEFRAMES  InpTrendTF = PERIOD_H1; // [Buy] TF for Trend Filter
+input int InpEmaFast = 50; // [Buy] EMA Fast
+input int InpEmaSlow = 200; // [Buy] EMA Slow
+
+input group "=== STOCH ===";
+input bool InpEnableStochFilter = false; // Enable/Disable Stoch Filter
+input ENUM_TIMEFRAMES InpStochTF = PERIOD_M5; // TF for Stoch Indicator
+input int InpStochK = 5; // Stock K
+input int InpStochD = 3; // Stock D
+input int InpStochSlowing = 3; // Stoch Slowing
+input ENUM_MA_METHOD InpStochMAMethod = MODE_SMA; // moving average method for stoch
+input ENUM_STO_PRICE InpStochPrice = STO_LOWHIGH; // calculation method (Low/High or Close/Close)
+input double InpStochOversold = 30.0; // Stoch Oversold
+input double InpStochOverbought = 70.0; // Stoch Overbought
+
 input group "++++++++++ OTHER ++++++++++";
 input int      InpMagicNumber = 2025111201;        // Magic Number
 input int      InpSlippage = 10; // Slippage (points)
@@ -89,6 +114,14 @@ struct ProfitInfo{
 //--- Global Variables
 double g_point_value;
 int g_digits;
+
+int handle_stoch = INVALID_HANDLE;
+int handle_ema_fast = INVALID_HANDLE;
+int handle_ema_slow = INVALID_HANDLE;
+
+double buffer_stoch_main[];
+double buffer_ema_fast[];
+double buffer_ema_slow[];
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                    |
@@ -107,6 +140,21 @@ int OnInit()
       return(INIT_PARAMETERS_INCORRECT);
    }
    
+   handle_stoch = iStochastic(_Symbol, InpStochTF, InpStochK, InpStochD, InpStochSlowing, InpStochMAMethod, InpStochPrice);
+   handle_ema_fast = iMA(_Symbol, InpTrendTF, InpEmaFast, 0, MODE_EMA, PRICE_CLOSE);
+   handle_ema_slow = iMA(_Symbol, InpTrendTF, InpEmaSlow, 0, MODE_EMA, PRICE_CLOSE);
+   
+   if(handle_stoch == INVALID_HANDLE || handle_ema_fast == INVALID_HANDLE || handle_ema_slow)
+   {
+      Print("Error creating indicators");
+      return(INIT_FAILED);
+   }
+   
+   //--- Set array as series
+   ArraySetAsSeries(buffer_stoch_main, true);
+   ArraySetAsSeries(buffer_ema_fast, true);
+   ArraySetAsSeries(buffer_ema_slow, true);
+   
    Print("Grid Trading EA initialized successfully");
    //Print("Grid Step: ", InpBuyGridStep, " points");
    //Print("Follow Distance: ", InpBuyFollowDistance, " points");
@@ -121,6 +169,10 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   IndicatorRelease(handle_stoch);
+   IndicatorRelease(handle_ema_fast);
+   IndicatorRelease(handle_ema_slow);
+   
    Print("EA deinitialized. Reason: ", reason);
 }
 
@@ -133,6 +185,8 @@ void OnTick()
    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    
+   if(!UpdateIndicators()) return;
+   
    if (InpBuyEnable) BuyManagement(ask);
    if (InpSellEnable) SellManagement(bid);
 }
@@ -141,6 +195,38 @@ double pips(int pts){ return (double)pts * _Point; }
 bool   IsBuy(ENUM_POSITION_TYPE t){ return (t==POSITION_TYPE_BUY); }
 bool   IsSell(ENUM_POSITION_TYPE t){ return (t==POSITION_TYPE_SELL); }
 bool   IsMySymbol(const string sym){ return (sym==_Symbol); }
+
+//+------------------------------------------------------------------+
+//| Update indicator buffers                                           |
+//+------------------------------------------------------------------+
+bool UpdateIndicators()
+{
+   if(CopyBuffer(handle_stoch, 0, 0, 5, buffer_stoch_main) <= 0) return false;
+   if(CopyBuffer(handle_ema_fast, 0, 0, 5, buffer_ema_fast) <= 0) return false;
+   if(CopyBuffer(handle_ema_slow, 0, 0, 5, buffer_ema_slow) <= 0) return false;
+   
+   return true;
+}
+
+bool CheckBuySignal () {
+   if (InpBuyEnableTrend && buffer_ema_fast[1] < buffer_ema_slow[1]) return false;
+   if (InpBuyEnableStoch) {
+      bool is_cross_up = buffer_stoch_main[2] <= InpStochOversold && buffer_stoch_main[1] > InpStochOversold;
+      if (!is_cross_up) return false;
+   }
+
+   return true;
+}
+
+bool CheckSellSignal () {
+   if (InpSellEnableTrend && buffer_ema_fast[1] > buffer_ema_slow[1]) return false;
+   if (InpSellEnableStoch) {
+      bool is_cross_down = buffer_stoch_main[2] >= InpStochOverbought && buffer_stoch_main[1] < InpStochOverbought;
+      if (!is_cross_down) return false;
+   }
+
+   return true;
+}
 
 void BuyManagement(double ask) {
 //--- Count positions and orders
@@ -171,6 +257,7 @@ void BuyManagement(double ask) {
    //--- Condition 1: No Buy Position - Place Buy Stop
    if(buy_positions == 0 && buy_stop_orders == 0)
    {
+      if (!CheckBuySignal()) return;
       double buy_stop_price = NormalizeDouble(ask + InpBuyOrderDistance * g_point_value, g_digits);
       PlaceBuyStop(buy_stop_price);
       return;
@@ -261,6 +348,7 @@ void SellManagement(double bid) {
    //--- Condition 1: No Sell Position - Place Sell Stop
    if(sell_positions == 0 && sell_stop_orders == 0)
    {
+      if (!CheckSellSignal()) return;
       double sell_stop_price = NormalizeDouble(bid - InpSellOrderDistance * g_point_value, g_digits);
       PlaceSellStop(sell_stop_price);
       return;
@@ -515,7 +603,10 @@ bool PlaceBuyStop(double price)
    if (InpBuyGridType == GRID_TP) {
       //if(dir==DIR_BUY) tpPrice = CalTagetPrice(tk.ask, InpProfitTargetPts);
       //else tpPrice = CalTagetPrice(tk.bid, InpProfitTargetPts); 
-      tp_price = CalTagetPrice(POSITION_TYPE_BUY);
+      //tp_price = CalTagetPrice(POSITION_TYPE_BUY);
+      int buy_positions = CountPositions(POSITION_TYPE_BUY);
+      int next_grid_step = buy_positions == 0 ? InpBuyGridStep: MathRound(InpBuyGridStep * pow(InpBuyGridStepMultiplier, buy_positions - 1));
+      tp_price = price + next_grid_step * g_point_value;
    }
    
    request.action = TRADE_ACTION_PENDING;
@@ -558,7 +649,10 @@ bool PlaceSellStop(double price)
    if (InpSellGridType == GRID_TP) {
       //if(dir==DIR_BUY) tpPrice = CalTagetPrice(tk.ask, InpProfitTargetPts);
       //else tpPrice = CalTagetPrice(tk.bid, InpProfitTargetPts); 
-      tp_price = CalTagetPrice(POSITION_TYPE_SELL);
+      //tp_price = CalTagetPrice(POSITION_TYPE_SELL);
+      int sell_positions = CountPositions(POSITION_TYPE_SELL);
+      int next_grid_step = sell_positions == 0 ? InpSellGridStep: MathRound(InpSellGridStep * pow(InpSellGridStepMultiplier, sell_positions - 1));
+      tp_price = price - next_grid_step * g_point_value;
    }
    
    request.action = TRADE_ACTION_PENDING;
