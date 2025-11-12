@@ -19,64 +19,64 @@ enum ENUM_NET_PROFIT {
 };
 
 //--- Input Parameters
-input group "=== BUY GRID SETTINGS ===";
+input group "++++++++++ BUY GRID SETTINGS ++++++++++";
 input bool     InpBuyEnable = true;              // [Buy] Enable Trading
-input ENUM_GRID_TYPE InpBuyGridType = GRID_CLOSE_ALL; // Grid Type
-input int      InpBuyGridStep = 5000;             // Grid Step (points)
-input double   InpBuyGridStepMultiplier = 1.1;    // Grid Step Multiplier
-input int      InpBuyFollowDistance = 1500;       // Follow Distance (points)
-input int      InpBuyOrderDistance = 1000;        // Order Distance (points)
+input ENUM_GRID_TYPE InpBuyGridType = GRID_CLOSE_ALL; // [Buy] Grid Type
+input int      InpBuyGridStep = 5000;             // [Buy] Grid Step (points)
+input double   InpBuyGridStepMultiplier = 1.1;    // [Buy] Grid Step Multiplier
+input int      InpBuyFollowDistance = 1500;       // [Buy] Follow Distance (points)
+input int      InpBuyOrderDistance = 1000;        // [Buy] Order Distance (points)
 
-input group "=== SELL GRID SETTINGS ===";
+input group "=== BUY PROFIT ==="; 
+input ENUM_NET_PROFIT InpBuySumNetType = NET_PROFIT_POINTS; // [Buy] Net Profit (Points/Amount)
+input int InpBuyNetProfitPoints = 3000; // [Buy] Net Profit Points (points)
+input double InpBuyProfitTargetAmount = 10.0; // [Buy] TP (Amount)
+
+input group "=== BUY TRAILING STOP ==="; 
+input int InpBuyStartTrailAbroveAvgPoints = 500; // [Buy] Start Trailing Stop (points)
+input int InpBuyTrailOffsetPoints = 300; // [Buy] Trailing Stop Offset (points)
+input bool InpBuyTrailOnlyTighten = true; // [Buy] Move SL just to get profit
+
+input group "=== BUY LOT SIZE ===";
+input double InpBuyLotSize = 0.01; // [Buy] Start Lot
+input double InpBuyMartingale = 1.1; // [Buy] Martingale Multiplier
+input double InpBuyMaxLots = 0.05; // [Buy] Maximum Lot
+
+input group "=== BUY ZONE FILTER ===";
+input bool InpBuyEnablePriceZone = false; // [Buy] Enable/Disable Price Zone
+input double InpBuyUpperPrice = 0.0; // [Buy] Upper Price (0 = No Limit)
+input double InpBuyLowerPrice = 0.0; // [Buy] Lower Price (0 = No Limit)
+
+input group "++++++++++ SELL GRID SETTINGS ++++++++++";
 input bool     InpSellEnable = false;              // [Sell] Enable Trading
-input ENUM_GRID_TYPE InpSellGridType = GRID_CLOSE_ALL; // Sell Grid Type
+input ENUM_GRID_TYPE InpSellGridType = GRID_CLOSE_ALL; // [Sell] Grid Type
 input int      InpSellGridStep = 5000;             // [Sell] Grid Step (points)
 input double   InpSellGridStepMultiplier = 1.1;    // [Sell] Grid Step Multiplier
 input int      InpSellFollowDistance = 1500;       // [Sell] Follow Distance (points)
 input int      InpSellOrderDistance = 1000;        // [Sell] Order Distance (points)
 
-input group "=== BUY PROFIT ==="; 
-input ENUM_NET_PROFIT InpBuySumNetType = NET_PROFIT_POINTS; // Net Profit (Points/Amount)
-input int InpBuyNetProfitPoints = 3000; // Net Profit Points (points)
-input double InpBuyProfitTargetAmount = 10.0; // TP (Amount)
-
 input group "=== SELL PROFIT ==="; 
-input ENUM_NET_PROFIT InpSellSumNetType = NET_PROFIT_POINTS; // Net Profit (Points/Amount)
+input ENUM_NET_PROFIT InpSellSumNetType = NET_PROFIT_POINTS; // [Sell] Net Profit (Points/Amount)
 input int InpSellNetProfitPoints = 3000; // [Sell] Net Profit Points (points)
 input double InpSellProfitTargetAmount = 10.0; // [Sell] TP (Amount)
 
-input group "=== BUY TRAILING STOP ==="; 
-input int InpBuyStartTrailAbroveAvgPoints = 500; // Start Trailing Stop (points)
-input int InpBuyTrailOffsetPoints = 300; // Trailing Stop Offset (points)
-input bool InpBuyTrailOnlyTighten = true; // Move SL just to get profit
-
 input group "=== SELL TRAILING STOP ==="; 
-input int InpSellStartTrailAbroveAvgPoints = 500; // Start Trailing Stop (points)
-input int InpSellTrailOffsetPoints = 300; // Trailing Stop Offset (points)
-input bool InpSellTrailOnlyTighten = true;  // Move SL just to get profit
-
-input group "=== BUY LOT SIZE ===";
-input double InpBuyLotSize = 0.01; // Start Lot
-input double InpBuyMartingale = 1.1; // Martingale Multiplier
-input double InpBuyMaxLots = 0.05; // Maximum Lot
+input int InpSellStartTrailAbroveAvgPoints = 500; // [Sell] Start Trailing Stop (points)
+input int InpSellTrailOffsetPoints = 300; // [Sell] Trailing Stop Offset (points)
+input bool InpSellTrailOnlyTighten = true;  // [Sell] Move SL just to get profit
 
 input group "=== SELL LOT SIZE ===";
-input double InpSellLotSize = 0.01; // Start Lot
-input double InpSellMartingale = 1.1; // Martingale Multiplier
-input double InpSellMaxLots = 0.05; // Maximum Lot
-
-input group "=== BUY ZONE FILTER ===";
-input bool InpBuyEnablePriceZone = false; // Enable/Disable Price Zone
-input double InpBuyUpperPrice = 0.0; // Upper Price (0 = No Limit)
-input double InpBuyLowerPrice = 0.0; // Lower Price (0 = No Limit)
+input double InpSellLotSize = 0.01; // [Sell] Start Lot
+input double InpSellMartingale = 1.1; // [Sell] Martingale Multiplier
+input double InpSellMaxLots = 0.05; // [Sell] Maximum Lot
 
 input group "=== SELL ZONE FILTER ===";
-input bool InpSellEnablePriceZone = false; // Enable/Disable Price Zone
-input double InpSellUpperPrice = 0.0; // Upper Price (0 = No Limit)
-input double InpSellLowerPrice = 0.0; // Lower Price (0 = No Limit)
+input bool InpSellEnablePriceZone = false; // [Sell] Enable/Disable Price Zone
+input double InpSellUpperPrice = 0.0; // [Sell] Upper Price (0 = No Limit)
+input double InpSellLowerPrice = 0.0; // [Sell] Lower Price (0 = No Limit)
 
-input group "=== OTHER ===";
-input int      InpMagicNumber = 2025111101;        // Magic Number
+input group "++++++++++ OTHER ++++++++++";
+input int      InpMagicNumber = 2025111201;        // Magic Number
 input int      InpSlippage = 10; // Slippage (points)
 input string   InpTradeComment = "Grid_BuySellStop"; // Comment
 
@@ -150,14 +150,15 @@ void BuyManagement(double ask) {
    //--- Check if we should close all positions (Profit Target)
    if(buy_positions > 0)
    {
-      if(CheckNetProfit(POSITION_TYPE_BUY) && InpBuyGridType == GRID_CLOSE_ALL)
+      bool chkNetProfit = CheckNetProfit(POSITION_TYPE_BUY);
+      if(chkNetProfit && InpBuyGridType == GRID_CLOSE_ALL)
       {
          CloseAllPositions(POSITION_TYPE_BUY);
          DeleteAllStopOrders(ORDER_TYPE_BUY_STOP);
          return;
       }
       
-      if(CheckNetProfit(POSITION_TYPE_BUY) && InpBuyGridType == GRID_TSL)
+      if(chkNetProfit && InpBuyGridType == GRID_TSL)
       {
          MaybeTrailAll(POSITION_TYPE_BUY);
          return;
@@ -197,7 +198,7 @@ void BuyManagement(double ask) {
    //--- Condition 3 & 4: Has Buy Position - Manage Buy Stop
    if(buy_positions > 0)
    {
-      int grid_step_result = (int)(InpBuyGridStep * pow(InpBuyGridStepMultiplier, CountPositions(POSITION_TYPE_BUY) - 1));
+      int grid_step_result = MathRound(InpBuyGridStep * pow(InpBuyGridStepMultiplier, CountPositions(POSITION_TYPE_BUY) - 1));
       double threshold_price = lowest_buy_price - (grid_step_result + InpBuyFollowDistance) * g_point_value;
       
       // ถ้าไม่มี Buy Stop และราคา Ask ต่ำกว่า threshold
@@ -239,14 +240,15 @@ void SellManagement(double bid) {
    //--- Check if we should close all positions (Profit Target)
    if(sell_positions > 0)
    {
-      if(CheckNetProfit(POSITION_TYPE_SELL) && InpSellGridType == GRID_CLOSE_ALL)
+      bool chkNetProfit = CheckNetProfit(POSITION_TYPE_SELL);
+      if(chkNetProfit && InpSellGridType == GRID_CLOSE_ALL)
       {
          CloseAllPositions(POSITION_TYPE_SELL);
          DeleteAllStopOrders(ORDER_TYPE_SELL_STOP);
          return;
       }
       
-      if(CheckNetProfit(POSITION_TYPE_SELL) && InpSellGridType == GRID_TSL)
+      if(chkNetProfit && InpSellGridType == GRID_TSL)
       {
          MaybeTrailAll(POSITION_TYPE_SELL);
          return;
@@ -270,7 +272,7 @@ void SellManagement(double bid) {
       double current_sell_stop_price = GetCurrentStopPrice(ORDER_TYPE_SELL_STOP);
       if(current_sell_stop_price > 0)
       {
-         double distance = MathAbs(current_sell_stop_price - bid) / g_point_value;
+         double distance = (bid - current_sell_stop_price) / g_point_value;
          
          // ถ้าระยะห่างมากกว่าหรือเท่ากับ Follow Distance
          if(distance >= InpSellFollowDistance)
@@ -286,7 +288,7 @@ void SellManagement(double bid) {
    //--- Condition 3 & 4: Has Sell Position - Manage Sell Stop
    if(sell_positions > 0)
    {
-      int grid_step_result = (int)(InpSellGridStep * pow(InpSellGridStepMultiplier, CountPositions(POSITION_TYPE_SELL) - 1));
+      int grid_step_result = MathRound(InpSellGridStep * pow(InpSellGridStepMultiplier, CountPositions(POSITION_TYPE_SELL) - 1));
       double threshold_price = highest_sell_price + (grid_step_result + InpSellFollowDistance) * g_point_value;
       
       // If has not Sell Stop & Bid > threshold_price
@@ -307,11 +309,11 @@ void SellManagement(double bid) {
       {
          double current_sell_stop_price = GetCurrentStopPrice(ORDER_TYPE_SELL_STOP);
          double new_sell_stop_price = NormalizeDouble(bid - InpSellOrderDistance * g_point_value, g_digits);
-         if(current_sell_stop_price >= highest_sell_price)
+         if(current_sell_stop_price <= highest_sell_price)
          {
             DeleteAllStopOrders(ORDER_TYPE_SELL_STOP);
          }
-         if(bid >= threshold_price && current_sell_stop_price < bid + InpSellFollowDistance * g_point_value)
+         if(bid >= threshold_price && current_sell_stop_price < bid - InpSellFollowDistance * g_point_value)
          {
             DeleteAllStopOrders(ORDER_TYPE_SELL_STOP);
             PlaceSellStop(new_sell_stop_price);
@@ -699,7 +701,7 @@ bool CheckNetProfit(ENUM_POSITION_TYPE pos_type)
    double total_volume = 0;
    double weighted_price = 0;
    
-   double current_bid = SymbolInfoDouble(_Symbol, pos_type == POSITION_TYPE_BUY ? SYMBOL_BID: SYMBOL_ASK);
+   double current_price = SymbolInfoDouble(_Symbol, pos_type == POSITION_TYPE_BUY ? SYMBOL_BID: SYMBOL_ASK);
    
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
@@ -722,12 +724,21 @@ bool CheckNetProfit(ENUM_POSITION_TYPE pos_type)
    if(total_volume > 0)
    {
       double average_price = weighted_price / total_volume;
-      total_profit_points = (current_bid - average_price) / g_point_value;
+      //total_profit_points = (current_bid - average_price) / g_point_value;
+      if(pos_type == POSITION_TYPE_BUY)
+      {
+         total_profit_points = (current_price - average_price) / g_point_value;
+      }
+      else  // SELL
+      {
+         total_profit_points = (average_price - current_price) / g_point_value; 
+      }
       
-      Print("Average Price: ", average_price, " | Current Bid: ", current_bid, 
+      Print("Average Price: ", average_price, " | Current Price: ", current_price, 
             " | Profit Points: ", total_profit_points);
       
-      if(total_profit_points >= InpBuyNetProfitPoints)
+      int net_profit_points = pos_type == POSITION_TYPE_BUY ? InpBuyNetProfitPoints: InpSellNetProfitPoints;
+      if(total_profit_points >= net_profit_points)
       {
          Print("Net profit target reached! Closing all buy positions...");
          return true;
@@ -926,7 +937,7 @@ void MaybeTrailAll(ENUM_POSITION_TYPE pos_type)
       else newSL = targetSL;
     }else{
       double targetSL = price + trail;
-      if(InpBuyTrailOnlyTighten) newSL = (curSL<=0) ? targetSL : MathMin(curSL, targetSL);
+      if(InpSellTrailOnlyTighten) newSL = (curSL<=0) ? targetSL : MathMin(curSL, targetSL);
       else newSL = targetSL;
     }
 
