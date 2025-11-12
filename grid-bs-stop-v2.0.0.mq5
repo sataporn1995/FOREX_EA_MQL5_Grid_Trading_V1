@@ -100,17 +100,18 @@ int OnInit()
    g_digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
    
    //--- Check parameters
-   if(InpBuyGridStep <= 0 || InpBuyFollowDistance <= 0 || InpBuyOrderDistance <= 0)
+   if(InpBuyGridStep <= 0 || InpBuyFollowDistance <= 0 || InpBuyOrderDistance <= 0
+   || InpSellGridStep <= 0 || InpSellFollowDistance <= 0 || InpSellOrderDistance <= 0)
    {
       Print("Error: Invalid input parameters!");
       return(INIT_PARAMETERS_INCORRECT);
    }
    
    Print("Grid Trading EA initialized successfully");
-   Print("Grid Step: ", InpBuyGridStep, " points");
-   Print("Follow Distance: ", InpBuyFollowDistance, " points");
-   Print("Order Distance: ", InpBuyOrderDistance, " points");
-   Print("Net Profit Points: ", InpBuyNetProfitPoints, " points");
+   //Print("Grid Step: ", InpBuyGridStep, " points");
+   //Print("Follow Distance: ", InpBuyFollowDistance, " points");
+   //Print("Order Distance: ", InpBuyOrderDistance, " points");
+   //Print("Net Profit Points: ", InpBuyNetProfitPoints, " points");
    
    return(INIT_SUCCEEDED);
 }
@@ -133,7 +134,7 @@ void OnTick()
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    
    if (InpBuyEnable) BuyManagement(ask);
-   //if ()
+   if (InpSellEnable) SellManagement(bid);
 }
 
 double pips(int pts){ return (double)pts * _Point; }
