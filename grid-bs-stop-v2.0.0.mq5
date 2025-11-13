@@ -41,6 +41,7 @@ input group "=== BUY LOT SIZE ===";
 input double InpBuyLotSize = 0.01; // [Buy] Start Lot
 input double InpBuyMartingale = 1.1; // [Buy] Martingale Multiplier
 input double InpBuyMaxLots = 0.05; // [Buy] Maximum Lot
+input int    InpBuyMaxOrders = 0; // [Buy] Maximum Orders (0 = No Limit)
 
 input group "=== BUY ZONE FILTER ===";
 input bool InpBuyEnablePriceZone = false; // [Buy] Enable/Disable Price Zone
@@ -73,6 +74,7 @@ input group "=== SELL LOT SIZE ===";
 input double InpSellLotSize = 0.01; // [Sell] Start Lot
 input double InpSellMartingale = 1.1; // [Sell] Martingale Multiplier
 input double InpSellMaxLots = 0.05; // [Sell] Maximum Lot
+input int    InpSellMaxOrders = 0; // [Sell] Maximum Orders (0 = No Limit)
 
 input group "=== SELL ZONE FILTER ===";
 input bool InpSellEnablePriceZone = false; // [Sell] Enable/Disable Price Zone
@@ -559,6 +561,9 @@ bool PlaceBuyStop(double price)
    bool isTradeZone = ValidateZone(POSITION_TYPE_BUY);
    if (InpBuyEnablePriceZone && !isTradeZone) return false;
    
+   int buy_positions = CountPositions(POSITION_TYPE_BUY);
+   if (buy_positions != 0 && buy_positions >= InpBuyMaxOrders) return false;
+   
    MqlTradeRequest request = {};
    MqlTradeResult result = {};
    
@@ -570,7 +575,6 @@ bool PlaceBuyStop(double price)
       //if(dir==DIR_BUY) tpPrice = CalTagetPrice(tk.ask, InpProfitTargetPts);
       //else tpPrice = CalTagetPrice(tk.bid, InpProfitTargetPts); 
       //tp_price = CalTagetPrice(POSITION_TYPE_BUY);
-      int buy_positions = CountPositions(POSITION_TYPE_BUY);
       int next_grid_step = buy_positions == 0 ? InpBuyGridStep: (int)(InpBuyGridStep * pow(InpBuyGridStepMultiplier, buy_positions - 1));
       tp_price = price + next_grid_step * g_point_value;
    }
@@ -606,6 +610,9 @@ bool PlaceSellStop(double price)
    bool isTradeZone = ValidateZone(POSITION_TYPE_SELL);
    if (InpSellEnablePriceZone && !isTradeZone) return false;
    
+   int sell_positions = CountPositions(POSITION_TYPE_SELL);
+   if (sell_positions != 0 && sell_positions >= InpSellMaxOrders) return false;
+   
    MqlTradeRequest request = {};
    MqlTradeResult result = {};
    
@@ -617,7 +624,6 @@ bool PlaceSellStop(double price)
       //if(dir==DIR_BUY) tpPrice = CalTagetPrice(tk.ask, InpProfitTargetPts);
       //else tpPrice = CalTagetPrice(tk.bid, InpProfitTargetPts); 
       //tp_price = CalTagetPrice(POSITION_TYPE_SELL);
-      int sell_positions = CountPositions(POSITION_TYPE_SELL);
       int next_grid_step = sell_positions == 0 ? InpSellGridStep: (int)(InpSellGridStep * pow(InpSellGridStepMultiplier, sell_positions - 1));
       tp_price = price - next_grid_step * g_point_value;
    }
