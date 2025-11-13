@@ -284,7 +284,7 @@ void BuyManagement(double ask) {
    //--- Condition 3 & 4: Has Buy Position - Manage Buy Stop
    if(buy_positions > 0)
    {
-      int grid_step_result = MathRound(InpBuyGridStep * pow(InpBuyGridStepMultiplier, CountPositions(POSITION_TYPE_BUY) - 1));
+      int grid_step_result = (int)(InpBuyGridStep * pow(InpBuyGridStepMultiplier, CountPositions(POSITION_TYPE_BUY) - 1));
       double threshold_price = lowest_buy_price - (grid_step_result + InpBuyFollowDistance) * g_point_value;
       
       // ถ้าไม่มี Buy Stop และราคา Ask ต่ำกว่า threshold
@@ -375,7 +375,7 @@ void SellManagement(double bid) {
    //--- Condition 3 & 4: Has Sell Position - Manage Sell Stop
    if(sell_positions > 0)
    {
-      int grid_step_result = MathRound(InpSellGridStep * pow(InpSellGridStepMultiplier, CountPositions(POSITION_TYPE_SELL) - 1));
+      int grid_step_result = (int)(InpSellGridStep * pow(InpSellGridStepMultiplier, CountPositions(POSITION_TYPE_SELL) - 1));
       double threshold_price = highest_sell_price + (grid_step_result + InpSellFollowDistance) * g_point_value;
       
       // If has not Sell Stop & Bid > threshold_price
@@ -571,7 +571,7 @@ bool PlaceBuyStop(double price)
       //else tpPrice = CalTagetPrice(tk.bid, InpProfitTargetPts); 
       //tp_price = CalTagetPrice(POSITION_TYPE_BUY);
       int buy_positions = CountPositions(POSITION_TYPE_BUY);
-      int next_grid_step = buy_positions == 0 ? InpBuyGridStep: MathRound(InpBuyGridStep * pow(InpBuyGridStepMultiplier, buy_positions - 1));
+      int next_grid_step = buy_positions == 0 ? InpBuyGridStep: (int)(InpBuyGridStep * pow(InpBuyGridStepMultiplier, buy_positions - 1));
       tp_price = price + next_grid_step * g_point_value;
    }
    
@@ -618,7 +618,7 @@ bool PlaceSellStop(double price)
       //else tpPrice = CalTagetPrice(tk.bid, InpProfitTargetPts); 
       //tp_price = CalTagetPrice(POSITION_TYPE_SELL);
       int sell_positions = CountPositions(POSITION_TYPE_SELL);
-      int next_grid_step = sell_positions == 0 ? InpSellGridStep: MathRound(InpSellGridStep * pow(InpSellGridStepMultiplier, sell_positions - 1));
+      int next_grid_step = sell_positions == 0 ? InpSellGridStep: (int)(InpSellGridStep * pow(InpSellGridStepMultiplier, sell_positions - 1));
       tp_price = price - next_grid_step * g_point_value;
    }
    
