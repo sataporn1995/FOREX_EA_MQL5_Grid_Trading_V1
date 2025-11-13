@@ -412,9 +412,9 @@ void SellManagement(double bid) {
 }
 
 bool ValidateZone(ENUM_POSITION_TYPE pos_type) {
-   double price = SymbolInfoDouble(_Symbol, pos_type == POSITION_TYPE_BUY ? SYMBOL_BID : SYMBOL_ASK);
-   double upper_price = pos_type == POSITION_TYPE_BUY ? InpBuyUpperPrice: InpSellUpperPrice;
-   double lower_price = pos_type == POSITION_TYPE_BUY ? InpBuyLowerPrice: InpSellLowerPrice;
+   double price = SymbolInfoDouble(_Symbol, IsBuy(pos_type) ? SYMBOL_BID : SYMBOL_ASK);
+   double upper_price = IsBuy(pos_type) ? InpBuyUpperPrice: InpSellUpperPrice;
+   double lower_price = IsBuy(pos_type) ? InpBuyLowerPrice: InpSellLowerPrice;
    if (price >= upper_price && upper_price != 0.0) return false;
    else if (price <= lower_price && lower_price != 0.0) return false;
    
@@ -541,12 +541,12 @@ double GetCurrentStopPrice(ENUM_ORDER_TYPE order_type)
 double CalTagetPrice(ENUM_POSITION_TYPE pos_type) // Buy -> ask, Sell -> bid
 {
    // คำนวณการเปลี่ยนแปลงของราคา
-   double price_change = (pos_type == POSITION_TYPE_BUY ? InpBuyNetProfitPoints: InpSellNetProfitPoints) * g_point_value;
+   double price_change = (IsBuy(pos_type) ? InpBuyNetProfitPoints: InpSellNetProfitPoints) * g_point_value;
    
-   double current_price = SymbolInfoDouble(_Symbol, pos_type == POSITION_TYPE_BUY ? SYMBOL_ASK: SYMBOL_BID);
+   double current_price = SymbolInfoDouble(_Symbol, IsBuy(pos_type) ? SYMBOL_ASK: SYMBOL_BID);
    
    // คำนวณราคาเป้าหมาย
-   double target_price = current_price + (pos_type == POSITION_TYPE_BUY ? price_change : -price_change);
+   double target_price = current_price + (IsBuy(pos_type) ? price_change : -price_change);
    
    // หากต้องการให้ราคาอยู่ในรูปที่ถูกต้องตาม Tick Size (แนะนำ)
    // ควรใช้ฟังก์ชัน NormailzeDouble() เพื่อปรับทศนิยมให้ถูกต้องตาม Symbol
@@ -689,7 +689,7 @@ bool CheckNetProfit(ENUM_POSITION_TYPE pos_type)
    double total_volume = 0;
    double weighted_price = 0;
    
-   double current_price = SymbolInfoDouble(_Symbol, pos_type == POSITION_TYPE_BUY ? SYMBOL_BID: SYMBOL_ASK);
+   double current_price = SymbolInfoDouble(_Symbol, IsBuy(pos_type) ? SYMBOL_BID: SYMBOL_ASK);
    
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
@@ -713,7 +713,7 @@ bool CheckNetProfit(ENUM_POSITION_TYPE pos_type)
    {
       double average_price = weighted_price / total_volume;
       //total_profit_points = (current_bid - average_price) / g_point_value;
-      if(pos_type == POSITION_TYPE_BUY)
+      if(IsBuy(pos_type))
       {
          total_profit_points = (current_price - average_price) / g_point_value;
       }
@@ -725,7 +725,7 @@ bool CheckNetProfit(ENUM_POSITION_TYPE pos_type)
       Print("Average Price: ", average_price, " | Current Price: ", current_price, 
             " | Profit Points: ", total_profit_points);
       
-      int net_profit_points = pos_type == POSITION_TYPE_BUY ? InpBuyNetProfitPoints: InpSellNetProfitPoints;
+      int net_profit_points = IsBuy(pos_type) ? InpBuyNetProfitPoints: InpSellNetProfitPoints;
       if(total_profit_points >= net_profit_points)
       {
          Print("Net profit target reached! Closing all buy positions...");
@@ -756,9 +756,9 @@ void CloseAllPositions(ENUM_POSITION_TYPE pos_type)
             request.action = TRADE_ACTION_DEAL;
             request.symbol = _Symbol;
             request.volume = PositionGetDouble(POSITION_VOLUME);
-            request.type = pos_type == POSITION_TYPE_BUY ? ORDER_TYPE_SELL : ORDER_TYPE_BUY;
+            request.type = IsBuy(pos_type) ? ORDER_TYPE_SELL : ORDER_TYPE_BUY;
             request.position = ticket;
-            request.price = SymbolInfoDouble(_Symbol, pos_type == POSITION_TYPE_BUY ? SYMBOL_BID: SYMBOL_ASK);
+            request.price = SymbolInfoDouble(_Symbol, IsBuy(pos_type) ? SYMBOL_BID: SYMBOL_ASK);
             request.deviation = InpSlippage;
             request.magic = InpMagicNumber;
             request.type_filling = ORDER_FILLING_IOC;
@@ -856,9 +856,9 @@ void MaybeTrailAll(ENUM_POSITION_TYPE pos_type)
   /*double price = (first.type==POSITION_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_BID)
                                                  : SymbolInfoDouble(_Symbol, SYMBOL_ASK);*/
                                                 
-  double price = SymbolInfoDouble(_Symbol, pos_type == POSITION_TYPE_BUY ? SYMBOL_BID : SYMBOL_ASK);                                                
+  double price = SymbolInfoDouble(_Symbol, IsBuy(pos_type) ? SYMBOL_BID : SYMBOL_ASK);                                                
 
-  double need = pips(pos_type == POSITION_TYPE_BUY ? InpBuyStartTrailAbroveAvgPoints: InpSellStartTrailAbroveAvgPoints);
+  double need = pips(IsBuy(pos_type) ? InpBuyStartTrailAbroveAvgPoints: InpSellStartTrailAbroveAvgPoints);
   bool ok=false;
   if(IsBuy(pos_type)){
     ok = (price >= (avgPrice + need));
@@ -867,7 +867,7 @@ void MaybeTrailAll(ENUM_POSITION_TYPE pos_type)
   }
   if(!ok) return;
 
-  double trail = pips(pos_type == POSITION_TYPE_BUY ? InpBuyTrailOffsetPoints: InpSellTrailOffsetPoints);
+  double trail = pips(IsBuy(pos_type) ? InpBuyTrailOffsetPoints: InpSellTrailOffsetPoints);
   int total=PositionsTotal();
   for(int i=0;i<total;i++){
     ulong ticket=PositionGetTicket(i);
