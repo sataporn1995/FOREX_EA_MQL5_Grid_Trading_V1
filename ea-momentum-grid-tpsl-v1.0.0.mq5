@@ -23,7 +23,7 @@ input int InpBuyTPDistance = 2000; // [Buy] TP Distance from VWAP (0 = No TP)
 input group "=== BUY TRAILING STOP ==="; 
 input int InpBuyStartTrailAbroveAvgPoints = 500; // [Buy] Start Trailing Stop (points)
 input int InpBuyTrailOffsetPoints = 300; // [Buy] Trailing Stop Offset (points)
-input bool InpBuyTrailOnlyTighten = true; // [Buy] Move SL just to get profit
+input bool InpBuyTrailOnlyTighten = true; // [Buy] Move SL just to get profit (false = Break Even)
 
 input group "=== BUY LOT SIZE ===";
 input double InpBuyLotSize = 0.01; // [Buy] Start Lot
@@ -55,7 +55,7 @@ input int InpSellTPDistance = 2000; // [Sell] TP Distance from VWAP (0 = No TP)
 input group "=== SELL TRAILING STOP ==="; 
 input int InpSellStartTrailAbroveAvgPoints = 500; // [Sell] Start Trailing Stop (points)
 input int InpSellTrailOffsetPoints = 300; // [Sell] Trailing Stop Offset (points)
-input bool InpSellTrailOnlyTighten = true;  // [Sell] Move SL just to get profit
+input bool InpSellTrailOnlyTighten = true;  // [Sell] Move SL just to get profit (false = Break Even)
 
 input group "=== SELL LOT SIZE ===";
 input double InpSellLotSize = 0.01; // [Sell] Start Lot
