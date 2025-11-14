@@ -567,7 +567,7 @@ bool PlaceBuyStop(double price)
    MqlTradeRequest request = {};
    MqlTradeResult result = {};
    
-   double next_lots = NormalizeDouble(InpBuyLotSize * pow(InpBuyMartingale, CountPositions(POSITION_TYPE_BUY)), 2);
+   double next_lots = NormalizeDouble(InpBuyLotSize * pow(InpBuyMartingale, buy_positions), 2);
    if (next_lots > InpBuyMaxLots) next_lots = InpBuyMaxLots;
    
    double tp_price = 0;
@@ -616,7 +616,7 @@ bool PlaceSellStop(double price)
    MqlTradeRequest request = {};
    MqlTradeResult result = {};
    
-   double next_lots = NormalizeDouble(InpSellLotSize * pow(InpSellMartingale, CountPositions(POSITION_TYPE_SELL)), 2);
+   double next_lots = NormalizeDouble(InpSellLotSize * pow(InpSellMartingale, sell_positions), 2);
    if (next_lots > InpSellMaxLots) next_lots = InpSellMaxLots;
    
    double tp_price = 0;
