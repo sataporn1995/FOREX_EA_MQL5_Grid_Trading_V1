@@ -27,10 +27,12 @@ input double   InpBuyGridStepMultiplier = 1.1;    // [Buy] Grid Step Multiplier
 input int      InpBuyFollowDistance = 1500;       // [Buy] Follow Distance (points)
 input int      InpBuyOrderDistance = 1000;        // [Buy] Order Distance (points)
 
-input group "=== BUY PROFIT ==="; 
-input ENUM_NET_PROFIT InpBuySumNetType = NET_PROFIT_POINTS; // [Buy] Net Profit (Points/Amount)
+input group "=== BUY PROFIT/LOSS ==="; 
+//input ENUM_NET_PROFIT InpBuySumNetType = NET_PROFIT_POINTS; // [Buy] Net Profit (Points/Amount)
 input int InpBuyNetProfitPoints = 3000; // [Buy] Net Profit Points (points)
-input double InpBuyProfitTargetAmount = 10.0; // [Buy] TP (Amount)
+//input double InpBuyProfitTargetAmount = 10.0; // [Buy] TP (Amount)
+input bool InpBuyUseSLMaxOrders = false; // [Buy] Enable/Disable SL for Max Orders != 0
+input int InpBuySLMaxOrdersDistance = 2000; // [Buy] SL for Max Orders != 0 (points)
 
 input group "=== BUY TRAILING STOP ==="; 
 input int InpBuyStartTrailAbroveAvgPoints = 500; // [Buy] Start Trailing Stop (points)
@@ -60,10 +62,12 @@ input double   InpSellGridStepMultiplier = 1.1;    // [Sell] Grid Step Multiplie
 input int      InpSellFollowDistance = 1500;       // [Sell] Follow Distance (points)
 input int      InpSellOrderDistance = 1000;        // [Sell] Order Distance (points)
 
-input group "=== SELL PROFIT ==="; 
-input ENUM_NET_PROFIT InpSellSumNetType = NET_PROFIT_POINTS; // [Sell] Net Profit (Points/Amount)
+input group "=== SELL PROFIT/LOSS ==="; 
+//input ENUM_NET_PROFIT InpSellSumNetType = NET_PROFIT_POINTS; // [Sell] Net Profit (Points/Amount)
 input int InpSellNetProfitPoints = 3000; // [Sell] Net Profit Points (points)
-input double InpSellProfitTargetAmount = 10.0; // [Sell] TP (Amount)
+//input double InpSellProfitTargetAmount = 10.0; // [Sell] TP (Amount)
+input bool InpSellUseSLMaxOrders = false; // [Sell] Enable/Disable SL for Max Orders != 0
+input int InpSellSLMaxOrdersDistance = 2000; // [Sell] SL for Max Orders != 0 (points)
 
 input group "=== SELL TRAILING STOP ==="; 
 input int InpSellStartTrailAbroveAvgPoints = 500; // [Sell] Start Trailing Stop (points)
@@ -93,18 +97,18 @@ input int InpEmaSlow = 200; // [Buy] EMA Slow
 
 input group "=== STOCH ===";
 input ENUM_TIMEFRAMES InpStochTF = PERIOD_M5; // TF for Stoch Indicator
-input int InpStochK = 14; // Stock K
-input int InpStochD = 3; // Stock D
-input int InpStochSlowing = 3; // Stoch Slowing
-input ENUM_MA_METHOD InpStochMAMethod = MODE_SMA; // moving average method for stoch
-input ENUM_STO_PRICE InpStochPrice = STO_LOWHIGH; // calculation method (Low/High or Close/Close)
+input int InpStochK = 14; // Stock K (Main)
+//input int InpStochD = 3; // Stock D
+//input int InpStochSlowing = 3; // Stoch Slowing
+//input ENUM_MA_METHOD InpStochMAMethod = MODE_SMA; // moving average method for stoch
+//input ENUM_STO_PRICE InpStochPrice = STO_LOWHIGH; // calculation method (Low/High or Close/Close)
 input double InpStochOversold = 30.0; // Stoch Oversold
 input double InpStochOverbought = 70.0; // Stoch Overbought
 
 input group "++++++++++ OTHER ++++++++++";
 input int      InpMagicNumber = 2025111201;        // Magic Number
 input int      InpSlippage = 10; // Slippage (points)
-input string   InpTradeComment = "Grid_BuySellStop"; // Comment
+input string   InpTradeComment = "Grid_Buy_Sell_Stop"; // Comment
 
 struct ProfitInfo{
   double profit;
@@ -141,7 +145,7 @@ int OnInit()
       return(INIT_PARAMETERS_INCORRECT);
    }
    
-   handle_stoch = iStochastic(_Symbol, InpStochTF, InpStochK, InpStochD, InpStochSlowing, InpStochMAMethod, InpStochPrice);
+   handle_stoch = iStochastic(_Symbol, InpStochTF, InpStochK, /*InpStochD*/3, /*InpStochSlowing*/3, MODE_SMA, STO_LOWHIGH);
    handle_ema_fast = iMA(_Symbol, InpTrendTF, InpEmaFast, 0, MODE_EMA, PRICE_CLOSE);
    handle_ema_slow = iMA(_Symbol, InpTrendTF, InpEmaSlow, 0, MODE_EMA, PRICE_CLOSE);
    
@@ -250,6 +254,12 @@ void BuyManagement(double ask) {
          MaybeTrailAll(POSITION_TYPE_BUY);
          return;
       }
+      
+      if (!chkNetProfit && buy_positions == InpBuyMaxOrders 
+         && InpBuyUseSLMaxOrders && InpBuySLMaxOrdersDistance != 0) {
+         SetCommonSLPositions(POSITION_TYPE_BUY);
+         return;
+      }
    }
    
    //--- Get lowest buy position price
@@ -339,6 +349,12 @@ void SellManagement(double bid) {
       if(chkNetProfit && InpSellGridType == GRID_TSL)
       {
          MaybeTrailAll(POSITION_TYPE_SELL);
+         return;
+      }
+      
+      if (!chkNetProfit && sell_positions == InpSellMaxOrders 
+         && InpSellUseSLMaxOrders && InpSellSLMaxOrdersDistance != 0) {
+         SetCommonSLPositions(POSITION_TYPE_SELL);
          return;
       }
    }
@@ -562,7 +578,7 @@ bool PlaceBuyStop(double price)
    if (InpBuyEnablePriceZone && !isTradeZone) return false;
    
    int buy_positions = CountPositions(POSITION_TYPE_BUY);
-   if (buy_positions != 0 && buy_positions >= InpBuyMaxOrders) return false;
+   if (InpBuyMaxOrders != 0 && buy_positions >= InpBuyMaxOrders) return false;
    
    MqlTradeRequest request = {};
    MqlTradeResult result = {};
@@ -611,7 +627,7 @@ bool PlaceSellStop(double price)
    if (InpSellEnablePriceZone && !isTradeZone) return false;
    
    int sell_positions = CountPositions(POSITION_TYPE_SELL);
-   if (sell_positions != 0 && sell_positions >= InpSellMaxOrders) return false;
+   if (InpSellMaxOrders != 0 && sell_positions >= InpSellMaxOrders) return false;
    
    MqlTradeRequest request = {};
    MqlTradeResult result = {};
@@ -896,5 +912,35 @@ void MaybeTrailAll(ENUM_POSITION_TYPE pos_type)
     }
   }
 }
+
+void SetCommonSLPositions(ENUM_POSITION_TYPE pos_type) {
+   double last_price = IsBuy(POSITION_TYPE_BUY) ? GetLowestBuyPrice(): GetHighestSellPrice();
+   int total=PositionsTotal();
+   for(int i=0;i<total;i++){
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+      if(!IsMySymbol((string)PositionGetString(POSITION_SYMBOL))) continue;
+      if((long)PositionGetInteger(POSITION_MAGIC)!=InpMagicNumber) continue;
+      if((ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE)!=pos_type) continue;
+
+      double curSL = PositionGetDouble(POSITION_SL);
+      double curTP = PositionGetDouble(POSITION_TP);
+      double newSL = curSL;
+
+      if(IsBuy(pos_type)){
+         double targetSL = last_price - InpBuySLMaxOrdersDistance * g_point_value;
+         newSL = targetSL;
+      }else{
+         double targetSL = last_price + InpSellSLMaxOrdersDistance * g_point_value;
+         newSL = targetSL;
+      }
+
+      if(newSL != curSL){
+         TradePositionModify(ticket, newSL, curTP);
+      }
+   }
+}
+
 
 //+------------------------------------------------------------------+
